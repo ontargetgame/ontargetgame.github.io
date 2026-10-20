@@ -1,0 +1,734 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}[hidden]{display:none!important}</style>
+</head>
+<body>
+<title>On Target</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800;900&family=Instrument+Sans:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: one narrow column like a darts scoreboard on a pub wall; target up top, picks as flip cards, actions pinned under. */
+:root {
+  --bg: #eef1ec;
+  --surface: #ffffff;
+  --ink: #13201a;
+  --muted: #5b6b62;
+  --line: #d3dbd5;
+  --board: #1b4d3e;
+  --board-ink: #f3f7f4;
+  --red: #c8323a;
+  --gold: #c99a1e;
+  --good: #2f8a4c;
+  --chip: #e2e8e3;
+  --display: "Big Shoulders Display", "Arial Narrow", Impact, sans-serif;
+  --body: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e1613; --surface: #16211c; --ink: #e7eee9; --muted: #95a59c; --line: #2a3832;
+    --board: #1f5a48; --board-ink: #f3f7f4; --red: #e5545b; --gold: #e2b33c; --good: #4fb56e; --chip: #22302a;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e1613; --surface: #16211c; --ink: #e7eee9; --muted: #95a59c; --line: #2a3832;
+  --board: #1f5a48; --board-ink: #f3f7f4; --red: #e5545b; --gold: #e2b33c; --good: #4fb56e; --chip: #22302a;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { background: var(--bg); }
+body { color: var(--ink); font: 16px/1.45 var(--body); }
+.wrap {
+  max-width: 560px; margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 14px 40px;
+  display: flex; flex-direction: column; gap: 14px;
+}
+button { font: inherit; color: inherit; cursor: pointer; }
+button:focus-visible, input:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
+button:disabled { cursor: not-allowed; opacity: .45; }
+
+/* header */
+.top { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.logo { font: 900 1.9rem/1 var(--display); letter-spacing: .01em; text-transform: uppercase; display: flex; align-items: center; gap: 8px; margin: 0; }
+.logo svg { width: 30px; height: 30px; flex: none; }
+.seg { display: inline-flex; background: var(--chip); border-radius: 999px; padding: 3px; gap: 2px; }
+.seg button { border: 0; background: none; padding: 6px 12px; border-radius: 999px; font-weight: 600; font-size: .88rem; color: var(--muted); }
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgb(0 0 0 / .12); }
+.bar { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+/* stats */
+.stats { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 8px 4px; }
+.stat { text-align: center; min-width: 0; }
+.stat b { display: block; font: 800 1.35rem/1.1 var(--display); font-variant-numeric: tabular-nums; }
+.stat span { font-size: .66rem; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); }
+
+/* target board */
+.board { background: var(--board); color: var(--board-ink); border-radius: 16px; padding: 16px 18px; display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 4px 12px; position: relative; overflow: hidden; }
+.board::after { content: ""; position: absolute; right: -60px; top: -60px; width: 200px; height: 200px; border-radius: 50%;
+  background: repeating-radial-gradient(circle, rgb(255 255 255 / .07) 0 12px, transparent 12px 24px); pointer-events: none; }
+.board .lab { font-size: .72rem; text-transform: uppercase; letter-spacing: .12em; opacity: .8; }
+.board .num { font: 900 clamp(4rem, 22vw, 6.2rem)/.9 var(--display); font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
+.board .side { text-align: right; position: relative; z-index: 1; }
+.board .side .tot { font: 800 2.2rem/1 var(--display); font-variant-numeric: tabular-nums; }
+.board .side .gap { font-weight: 600; font-size: .9rem; }
+.board .who { grid-column: 1 / -1; font-weight: 600; font-size: .95rem; }
+
+/* search */
+.search .sbox { position: relative; }
+.search input { width: 100%; min-width: 0; font: 500 1.05rem var(--body); padding: 13px 14px 13px 42px; border: 2px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--ink); }
+.search input:focus { border-color: var(--board); outline: none; }
+.search svg { position: absolute; left: 14px; top: 50%; translate: 0 -50%; width: 18px; height: 18px; color: var(--muted); }
+.results { list-style: none; margin: 6px 0 0; padding: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.results:empty { display: none; }
+.results li + li { border-top: 1px solid var(--line); }
+.results button { width: 100%; text-align: left; background: none; border: 0; padding: 10px 14px; display: flex; flex-direction: column; gap: 1px; }
+.results button:hover:not(:disabled), .results button.hl { background: var(--chip); }
+.results .n { font-weight: 600; }
+.results .m { font-size: .8rem; color: var(--muted); }
+.results .empty { padding: 12px 14px; color: var(--muted); font-size: .9rem; }
+
+/* pick cards */
+#pick { display: flex; flex-direction: column; gap: 16px; }
+.picks { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.card { perspective: 600px; min-width: 0; height: 112px; }
+.card .in { position: relative; width: 100%; height: 100%; transition: transform .5s cubic-bezier(.3,.7,.3,1.2); transform-style: preserve-3d; }
+.card.flip .in { transform: rotateY(180deg); }
+.face { position: absolute; inset: 0; backface-visibility: hidden; border-radius: 10px; padding: 6px; display: grid; justify-items: center; text-align: center; overflow: hidden; }
+.face .pn { width: 100%; font-weight: 700; line-height: 1.15; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; hyphens: auto; overflow-wrap: break-word; }
+.front { background: var(--surface); border: 2px solid var(--line); grid-template-rows: 22px calc(2 * 1.15em) auto; align-content: start; row-gap: 6px; font-size: .8rem; }
+.card.empty .front { border-style: dashed; background: transparent; color: var(--muted); grid-template-rows: 1fr; align-items: center; }
+.card.req.empty .front { border-color: var(--board); }
+.front .pc { width: 100%; font-size: .68rem; color: var(--muted); line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.front .x { justify-self: end; border: 0; background: var(--chip); border-radius: 50%; width: 22px; height: 22px; line-height: 22px; padding: 0; font-size: .85rem; }
+.back { background: var(--board); color: var(--board-ink); transform: rotateY(180deg); grid-template-rows: 2.6rem auto calc(2 * 1.15em); align-content: center; row-gap: 3px; font-size: .74rem; }
+.back .g { align-self: end; font: 900 2.3rem/1 var(--display); font-variant-numeric: tabular-nums; }
+.back .pn { opacity: .92; font-weight: 600; }
+.back .gl { font-size: .58rem; line-height: 1; text-transform: uppercase; letter-spacing: .1em; opacity: .7; }
+
+.actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.btn { border: 0; border-radius: 12px; padding: 13px 18px; font-weight: 700; font-size: 1rem; background: var(--chip); }
+.btn.primary { background: var(--red); color: #fff; flex: 1; }
+.btn.go { background: var(--board); color: var(--board-ink); flex: 1; }
+.btn.ghost { background: none; border: 1.5px solid var(--line); }
+.hint-line { font-size: .85rem; color: var(--muted); margin: 0; }
+
+/* result */
+.result { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+.verdict { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.verdict .lbl { font: 900 2rem/1 var(--display); text-transform: uppercase; }
+.verdict .pts { font: 800 1.4rem/1 var(--display); font-variant-numeric: tabular-nums; }
+.lbl.bullseye { color: var(--red); } .lbl.treble { color: var(--good); } .lbl.double { color: var(--good); }
+.lbl.bust { color: var(--red); } .lbl.miss, .lbl.board { color: var(--ink); }
+.mind { font-size: .9rem; border-top: 1px dashed var(--line); padding-top: 10px; }
+.mind b { font-weight: 700; }
+.challenge { background: var(--chip); border-left: 4px solid var(--gold); border-radius: 10px; padding: 10px 12px; font-size: .92rem; }
+.share { background: var(--chip); border-radius: 10px; padding: 10px 12px; white-space: pre-wrap; font: 500 .85rem/1.45 ui-monospace, "SF Mono", Menlo, monospace; margin: 0; overflow-x: auto; }
+.toast { position: fixed; left: 50%; translate: -50% 0; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); background: var(--ink); color: var(--bg); padding: 9px 16px; border-radius: 999px; font-weight: 600; font-size: .9rem; z-index: 20; }
+
+/* head to head */
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+.panel h2 { font: 900 1.6rem/1 var(--display); text-transform: uppercase; margin: 0; text-wrap: balance; }
+.field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.field label, .field .fl { font-size: .74rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 600; }
+.field input { width: 100%; min-width: 0; font: 500 1rem var(--body); padding: 11px 12px; border: 2px solid var(--line); border-radius: 10px; background: var(--bg); color: var(--ink); }
+.two { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 140px), 1fr)); gap: 10px; }
+.score { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 10px 14px; }
+.score .nm { font-weight: 700; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.score .nm:last-child { text-align: right; }
+.score .sc { font: 900 2rem/1 var(--display); font-variant-numeric: tabular-nums; }
+.score .fmt { grid-column: 1 / -1; text-align: center; font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+.handoff { text-align: center; align-items: center; padding-block: 34px; }
+.handoff p { margin: 0; color: var(--muted); max-width: 32ch; }
+.vs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.side-res { background: var(--surface); border: 2px solid var(--line); border-radius: 14px; padding: 12px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.side-res.win { border-color: var(--good); }
+.side-res h3 { margin: 0; font-size: 1rem; overflow-wrap: anywhere; }
+.side-res ol { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 3px; font-size: .82rem; }
+.side-res li { display: flex; justify-content: space-between; gap: 6px; }
+.side-res li span:first-child { min-width: 0; overflow-wrap: anywhere; }
+.side-res li .gv { font-weight: 700; font-variant-numeric: tabular-nums; opacity: 0; transition: opacity .3s; }
+.side-res li .gv.on { opacity: 1; }
+.side-res .tt { font: 900 1.9rem/1 var(--display); font-variant-numeric: tabular-nums; }
+.side-res .tl { font-size: .82rem; font-weight: 600; }
+.round-msg { text-align: center; font: 800 1.3rem/1.1 var(--display); text-transform: uppercase; margin: 0; }
+.log { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; font-size: .86rem; }
+.log li { border-top: 1px solid var(--line); padding-top: 8px; }
+.tag { display: inline-block; font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; padding: 2px 7px; border-radius: 999px; background: var(--chip); }
+.foot { font-size: .75rem; color: var(--muted); text-align: center; margin: 6px 0 0; }
+
+@media (max-width: 380px) {
+  .vs { grid-template-columns: 1fr; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .card .in { transition: none; }
+}
+</style>
+
+<div class="wrap" id="app">
+  <header class="top">
+    <h1 class="logo">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="15" fill="var(--board)"/><circle cx="16" cy="16" r="10.5" fill="var(--bg)"/><circle cx="16" cy="16" r="6" fill="var(--red)"/><circle cx="16" cy="16" r="2.2" fill="var(--bg)"/></svg>
+      On Target
+    </h1>
+    <div class="seg" role="group" aria-label="Game mode">
+      <button id="mode-solo" aria-pressed="true">Solo</button>
+      <button id="mode-h2h" aria-pressed="false">Head-to-head</button>
+    </div>
+  </header>
+  <main id="view"></main>
+  <p class="foot">Career Premier League goals since 1992, as of <span id="asof"></span>. Scoring: exact 30 points. 1 short 20, sliding down to 1 point at the edge of the scoring zone shown under the target. Over the target loses a point per goal over (up to 20). Pick anyone who never scored a PL goal and the round is a Blank: 0 at best.</p>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script src="players.js"></script>
+<script>
+(() => {
+"use strict";
+// ---------------------------------------------------------------- data
+const RAW = (window.FD_DATA && window.FD_DATA.players) || [];
+document.getElementById("asof").textContent = (window.FD_DATA && window.FD_DATA.asof) || "today";
+const fold = s => s.normalize("NFKD").replace(/[̀-ͯ]/g, "")
+  .replace(/[øØ]/g, "o").replace(/[æÆ]/g, "ae").replace(/ß/g, "ss").replace(/[łŁ]/g, "l").replace(/[đĐ]/g, "d")
+  .toLowerCase().replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+const ALL = RAW.map((r, i) => ({ id: i, n: r[0], g: r[1], a: r[2] || 0, c: r[3] || "", y: r[4] || "", f: fold(r[0]) }));
+ALL.forEach(p => { p.words = p.f.split(" "); });
+// Every player can be picked. The example answer after Reveal uses players most fans
+// know (20+ goals or 200+ appearances) when it can.
+const KNOWN = ALL.filter(p => p.g >= 20 || p.a >= 200);
+const SCORERS = ALL.filter(p => p.g > 0);
+
+// ---------------------------------------------------------------- storage
+const store = {
+  get(k, d) { try { const v = localStorage.getItem("fd." + k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem("fd." + k, JSON.stringify(v)); } catch {} },
+};
+
+// ---------------------------------------------------------------- rules
+// Scoring zone: how far short still scores. 20 for most targets, tighter on small
+// ones (a third of the target, at least 5) and wider on big ones (a tenth of it).
+const zone = target => Math.max(5, Math.min(Math.round(target / 3), Math.max(20, Math.round(target / 10))));
+
+function grade(target, picks) {
+  // Exact = 30. Short by 1 = 20, sliding down to 1 point at the edge of the zone.
+  // Over loses a point per goal over, capped at -20. Picking anyone who never
+  // scored a PL goal is a Blank: the round can't score above 0.
+  const total = picks.reduce((a, p) => a + p.g, 0), W = zone(target);
+  const blanks = picks.filter(p => p.g === 0);
+  let r;
+  if (total > target) { const gap = total - target; r = { bust: true, gap, pts: -Math.min(gap, 20), label: "Bust", cls: "bust" }; }
+  else {
+    const gap = target - total;
+    const pts = gap === 0 ? 30 : gap > W ? 0 : Math.round(20 - 19 * (gap - 1) / Math.max(1, W - 1));
+    r = gap === 0 ? { gap, pts, label: "Bullseye", cls: "bullseye" }
+      : gap <= Math.ceil(W / 4) ? { gap, pts, label: "Treble", cls: "treble" }
+      : gap <= Math.ceil(W * .75) ? { gap, pts, label: "Double", cls: "double" }
+      : gap <= W ? { gap, pts, label: "On the board", cls: "board" }
+      : { gap, pts, label: "Missed the board", cls: "miss" };
+  }
+  r.zone = W; r.total = total;
+  if (blanks.length) Object.assign(r, { blank: blanks, pts: Math.min(r.pts, 0), label: "Blank", cls: "bust" });
+  return r;
+}
+const num = n => n < 0 ? "−" + -n : String(n);
+const signed = n => (n > 0 ? "+" : "") + num(n);
+const gapText = r => r.bust ? `${r.gap} over` : r.gap === 0 ? "exact" : `${r.gap} short`;
+
+const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = Math.random() * (i + 1) | 0; [a[i], a[j]] = [a[j], a[i]]; } return a; };
+const rint = (lo, hi) => lo + Math.floor(Math.random() * (hi - lo + 1));
+
+// One exact 3-5 player combination for a target, best-known players preferred.
+function findCombo(T, pool) {
+  const by = new Map();
+  for (const p of pool) { if (!by.has(p.g)) by.set(p.g, []); by.get(p.g).push(p); }
+  for (const list of by.values()) list.sort((a, b) => b.a - a.a);
+  const vals = shuffle([...by.keys()]);
+  const pairs = new Map();
+  for (let i = 0; i < vals.length; i++) for (let j = i; j < vals.length; j++) {
+    const s = vals[i] + vals[j];
+    if (s > T) continue;
+    if (!pairs.has(s)) pairs.set(s, []);
+    pairs.get(s).push([vals[i], vals[j]]);
+  }
+  const fits = combo => {
+    const need = new Map();
+    for (const v of combo) need.set(v, (need.get(v) || 0) + 1);
+    for (const [v, k] of need) if (by.get(v).length < k) return false;
+    return true;
+  };
+  const toPlayers = combo => {
+    const used = new Map();
+    return combo.map(v => { const k = used.get(v) || 0; used.set(v, k + 1); return by.get(v)[k]; })
+      .sort((a, b) => b.g - a.g);
+  };
+  const pick = list => list.length ? toPlayers(list[Math.random() * list.length | 0]) : null;
+  // 3 players, preferring combos of players with at least a few goals each
+  let found = [];
+  for (const a of vals) {
+    for (const pr of pairs.get(T - a) || []) { const c = [a, ...pr]; if (fits(c)) found.push(c); }
+    if (found.length > 60) break;
+  }
+  const scoring = found.filter(c => c.every(v => v >= 3));
+  if (scoring.length) return pick(scoring);
+  if (found.length) return pick(found);
+  // 4 players
+  for (const [s, list] of pairs) {
+    for (const pr2 of pairs.get(T - s) || []) for (const pr of list) { const c = [...pr, ...pr2]; if (fits(c)) found.push(c); }
+    if (found.length > 40) break;
+  }
+  if (found.length) return pick(found);
+  // 5 players
+  for (const a of vals) {
+    for (const [s, list] of pairs) {
+      for (const pr2 of pairs.get(T - a - s) || []) for (const pr of list) { const c = [a, ...pr, ...pr2]; if (fits(c)) found.push(c); }
+      if (found.length > 20) return pick(found);
+    }
+  }
+  return pick(found);
+}
+
+function newTarget(recent, fixed) {
+  if (fixed) return { target: fixed, combo: findCombo(fixed, KNOWN) || findCombo(fixed, SCORERS) };
+  // Mostly small and mid targets so low scorers and obscure names are worth picking;
+  // a big one now and then. [low, high, chance]
+  const bands = [[10, 50, .3], [51, 120, .3], [121, 250, .25], [251, 500, .15]];
+  for (let tries = 0; tries < 200; tries++) {
+    let x = Math.random(), band = bands[0];
+    for (const b of bands) { band = b; if ((x -= b[2]) < 0) break; }
+    const [lo, hi] = band;
+    const T = rint(lo, hi);
+    if (recent.includes(T)) continue;
+    const combo = findCombo(T, KNOWN) || findCombo(T, SCORERS);
+    if (combo) return { target: T, combo };
+  }
+  return { target: 349, combo: findCombo(349, KNOWN) };
+}
+
+// ---------------------------------------------------------------- helpers
+const $ = (s, el = document) => el.querySelector(s);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const meta = p => [p.c, p.y].filter(Boolean).join(" · ");
+const reduced = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+const wait = ms => new Promise(r => setTimeout(r, reduced() ? 0 : ms));
+let toastTimer;
+function toast(msg) {
+  const t = $("#toast"); t.textContent = msg; t.hidden = false;
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, 1800);
+}
+async function copy(text, pre) {
+  try { await navigator.clipboard.writeText(text); toast("Copied. Paste it to your friends"); }
+  catch {
+    if (pre) { pre.textContent = text; const r = document.createRange(); r.selectNodeContents(pre); const s = getSelection(); s.removeAllRanges(); s.addRange(r); }
+    toast("Select the text and copy it");
+  }
+}
+const SEARCH_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>';
+
+function search(q, pool) {
+  const f = fold(q);
+  if (f.length < 2) return [];
+  const parts = f.split(" ");
+  const hits = [];
+  for (const p of pool) {
+    const ok = parts.every(t => p.words.some(w => w.startsWith(t))) || (f.length >= 4 && p.f.includes(f));
+    if (ok) hits.push(p);
+  }
+  return hits.sort((a, b) => (b.a + 2 * b.g) - (a.a + 2 * a.g)).slice(0, 8);
+}
+
+// A pick area: search box, results, 5 cards. Returns an object with reveal().
+function picker(root, opts) {
+  // opts: { picks (array, mutated), pool, onChange }
+  const picks = opts.picks;
+  root.innerHTML = `
+    <div class="search"><div class="sbox">${SEARCH_ICON}
+      <input id="${opts.id}" type="search" autocomplete="off" spellcheck="false" placeholder="Search any Premier League player" aria-label="Search players"></div>
+      <ul class="results" role="listbox"></ul>
+    </div>
+    <div class="picks"></div>`;
+  const input = $("input", root), list = $(".results", root), cards = $(".picks", root);
+  let hits = [], hl = -1, locked = false;
+  const renderCards = () => {
+    cards.innerHTML = Array.from({ length: 5 }, (_, i) => {
+      const p = picks[i];
+      if (!p) return `<div class="card empty ${i < 3 ? "req" : ""}"><div class="in"><div class="face front">${i < 3 ? "Pick " + (i + 1) : "Optional"}</div></div></div>`;
+      return `<div class="card" data-i="${i}"><div class="in">
+        <div class="face front">${locked ? "<span></span>" : `<button class="x" data-rm="${i}" aria-label="Remove ${esc(p.n)}">×</button>`}
+          <div class="pn" lang="en">${esc(p.n)}</div><div class="pc">${esc(p.c.split(",")[0] || "")}</div></div>
+        <div class="face back"><div class="g">${p.g}</div><div class="gl">goals</div><div class="pn" lang="en">${esc(p.n)}</div></div>
+      </div></div>`;
+    }).join("");
+  };
+  const renderList = () => {
+    const q = input.value;
+    if (fold(q).length < 2) { list.innerHTML = ""; return; }
+    if (!hits.length) { list.innerHTML = `<li class="empty">No player called “${esc(q)}”.</li>`; return; }
+    list.innerHTML = hits.map((p, i) => {
+      const taken = picks.includes(p), used = !taken && opts.used && opts.used.has(p.id);
+      return `<li><button data-id="${p.id}" class="${i === hl ? "hl" : ""}" ${taken || used || picks.length >= 5 ? "disabled" : ""}>
+        <span class="n">${esc(p.n)}${taken ? " · picked" : used ? " · used in an earlier round" : ""}</span><span class="m">${esc(meta(p))}</span></button></li>`;
+    }).join("");
+  };
+  const add = p => {
+    if (locked || picks.length >= 5 || picks.includes(p) || (opts.used && opts.used.has(p.id))) return;
+    picks.push(p); input.value = ""; hits = []; hl = -1;
+    renderList(); renderCards(); opts.onChange();
+    if (picks.length < 5) input.focus();
+  };
+  input.addEventListener("input", () => { hits = search(input.value, opts.pool); hl = -1; renderList(); });
+  input.addEventListener("keydown", e => {
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault(); if (!hits.length) return;
+      hl = (hl + (e.key === "ArrowDown" ? 1 : -1) + hits.length) % hits.length; renderList();
+    } else if (e.key === "Enter") {
+      const p = hits[hl < 0 ? 0 : hl]; if (p) { e.preventDefault(); add(p); }
+    } else if (e.key === "Escape") { input.value = ""; hits = []; renderList(); }
+  });
+  list.addEventListener("click", e => {
+    const b = e.target.closest("button[data-id]"); if (b) add(ALL[+b.dataset.id]);
+  });
+  cards.addEventListener("click", e => {
+    const b = e.target.closest("[data-rm]"); if (!b || locked) return;
+    picks.splice(+b.dataset.rm, 1); renderCards(); renderList(); opts.onChange();
+  });
+  renderCards();
+  return {
+    lock() { locked = true; $(".search", root).hidden = true; renderCards(); },
+    async reveal(onEach) {
+      this.lock();
+      let run = 0;
+      for (let i = 0; i < picks.length; i++) {
+        await wait(i ? 650 : 200);
+        cards.children[i].classList.add("flip");
+        run += picks[i].g; onEach && onEach(run, i);
+      }
+      await wait(450);
+    },
+    showAll() { this.lock(); [...cards.children].forEach((c, i) => { if (picks[i]) c.classList.add("flip"); }); },
+  };
+}
+
+function boardHTML(target, extra = "") {
+  return `<section class="board" aria-live="polite">
+    <div><div class="lab">Target</div><div class="num">${target}</div><div class="lab">Scores within ${zone(target)}</div></div>
+    <div class="side"><div class="lab">Your total</div><div class="tot" id="tot">?</div><div class="gap" id="gapline">3 to 5 players</div></div>
+    ${extra}</section>`;
+}
+
+
+// ---------------------------------------------------------------- solo
+const solo = {
+  stats: { points: 0, rounds: 0, gapSum: 0, gapN: 0, streak: 0 },
+  best: store.get("best", 0),
+  bulls: store.get("bulls", 0),
+  recent: store.get("recent", []),
+  noRepeat: store.get("norepeat", false),
+  used: new Set(),  // players picked in earlier rounds this session
+  round: null,
+};
+const repeatToggle = (on, id) => `<div class="seg" role="group" aria-label="Repeat players">
+    <button data-rep="0" id="${id}-0" aria-pressed="${!on}">Normal</button>
+    <button data-rep="1" id="${id}-1" aria-pressed="${on}">No repeats</button></div>`;
+
+// Challenge links: <page>#c66s18 opens target 66 with a friend's score of 18 to beat.
+const ART_URL = "https://claude.ai/artifact/TZpB1WfXGKDZwgXCEM4mSX";
+const shareBase = () => /^https?:$/.test(location.protocol) && !/claude/.test(location.hostname) ? location.origin + location.pathname : ART_URL;
+function readChallenge() {
+  const m = location.hash.match(/^#c(\d{1,3})(?:s(-?\d{1,2}))?$/);
+  if (!m || +m[1] < 3) return null;
+  return { target: +m[1], score: m[2] == null ? null : +m[2] };
+}
+
+function soloNew(challenge) {
+  const t = newTarget(solo.recent, challenge && challenge.target);
+  solo.recent = [...solo.recent, t.target].slice(-20); store.set("recent", solo.recent);
+  solo.round = { ...t, picks: [], done: false, res: null, challenge: challenge || null };
+  renderSolo();
+}
+
+function renderSolo() {
+  const s = solo.stats, r = solo.round;
+  const avg = s.gapN ? Math.round(s.gapSum / s.gapN) : "–";
+  view.innerHTML = `
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div class="bar">${repeatToggle(solo.noRepeat, "sr")}
+        <span class="hint-line">${solo.noRepeat ? `Each player once per session${solo.used.size ? ` · ${solo.used.size} used` : ""}` : "Pick anyone, any round"}</span></div>
+      <section class="stats" aria-label="Session stats">
+        <div class="stat"><b>${num(s.points)}</b><span>Points</span></div>
+        <div class="stat"><b>${s.rounds}</b><span>Rounds</span></div>
+        <div class="stat"><b>${avg}</b><span>Avg gap</span></div>
+        <div class="stat"><b>${s.streak}</b><span>Streak</span></div>
+        <div class="stat"><b>${solo.best}</b><span>Best</span></div>
+      </section>
+      ${r.challenge ? `<div class="challenge"><b>Challenge</b> ${r.challenge.score == null ? "A friend sent you this target." : `A friend scored <b>${num(r.challenge.score)}</b> on this target. Beat it.`}</div>` : ""}
+      ${boardHTML(r.target)}
+      <div id="pick"></div>
+      <div class="actions" id="acts">
+        <button class="btn primary" id="reveal" disabled>Reveal</button>
+        <button class="btn ghost" id="skip">Skip</button>
+      </div>
+      <div id="res"></div>
+    </div>`;
+  view.querySelectorAll("[data-rep]").forEach(b => b.onclick = () => {
+    solo.noRepeat = b.dataset.rep === "1"; store.set("norepeat", solo.noRepeat);
+    if (solo.noRepeat && !r.done) r.picks.splice(0, r.picks.length, ...r.picks.filter(p => !solo.used.has(p.id)));
+    renderSolo();
+  });
+  const pk = picker($("#pick"), { id: "solo-search", picks: r.picks, pool: ALL, used: solo.noRepeat ? solo.used : null, onChange: sync });
+  const revealBtn = $("#reveal"), skipBtn = $("#skip");
+  function sync() {
+    revealBtn.disabled = r.picks.length < 3;
+    skipBtn.disabled = r.picks.length > 0;
+    $("#gapline").textContent = r.picks.length < 3 ? `Pick ${3 - r.picks.length} more` : `${r.picks.length} picked · ready`;
+  }
+  sync();
+  skipBtn.onclick = () => {
+    s.rounds++; s.streak = 0; soloNew(); toast("Skipped. 0 points, streak reset");
+  };
+  revealBtn.onclick = async () => {
+    revealBtn.disabled = true; skipBtn.disabled = true;
+    await pk.reveal(run => { $("#tot").textContent = run; });
+    finishSolo(pk);
+  };
+  if (r.done) { pk.showAll(); finishSolo(pk, true); }
+}
+
+function finishSolo(pk, again) {
+  const s = solo.stats, r = solo.round;
+  const total = r.picks.reduce((a, p) => a + p.g, 0);
+  if (!again) {
+    r.res = grade(r.target, r.picks); r.done = true;
+    r.picks.forEach(p => solo.used.add(p.id));
+    s.rounds++; s.points += r.res.pts;
+    if (!r.res.bust) { s.gapSum += r.res.gap; s.gapN++; }
+    s.streak = !r.res.bust && !r.res.blank && r.res.label !== "Missed the board" && r.res.label !== "On the board" ? s.streak + 1 : 0;
+    if (s.streak > solo.best) { solo.best = s.streak; store.set("best", solo.best); }
+    if (r.res.gap === 0 && !r.res.bust) { solo.bulls++; store.set("bulls", solo.bulls); }
+    if (mode === "solo") renderSolo();
+    return;
+  }
+  const res = r.res;
+  $("#tot").textContent = total;
+  $("#gapline").textContent = gapText(res);
+  const share = [`On Target 🎯 Target: ${r.target}`, "",
+    ...r.picks.map(p => `${p.n} ${p.g}`), "",
+    `Total: ${total} (${gapText(res)})`,
+    `${res.label}: ${signed(res.pts)} pts`].join("\n");
+  // The challenge text leaves the players out so it doesn't give the answer away.
+  const challenge = `I scored ${signed(res.pts)} on target ${r.target} in On Target 🎯 Can you beat it? ${shareBase()}#c${r.target}s${res.pts}`;
+  const vsFriend = r.challenge && r.challenge.score != null
+    ? (res.pts > r.challenge.score ? `You beat your friend's ${num(r.challenge.score)}.` : res.pts < r.challenge.score ? `Your friend's ${num(r.challenge.score)} wins this one.` : `Level with your friend on ${num(r.challenge.score)}.`) : "";
+  const mind = r.combo ? r.combo.map(p => `<b>${esc(p.n)}</b> ${p.g}`).join(" + ") + ` = ${r.target}` : "";
+  $("#acts").innerHTML = `<button class="btn go" id="next">Next target</button>`;
+  $("#res").innerHTML = `<section class="result">
+    <div class="verdict"><span class="lbl ${res.cls}">${res.label}</span><span class="pts">${signed(res.pts)} pts</span></div>
+    <div class="hint-line">${res.blank ? `${res.blank.map(p => esc(p.n)).join(" and ")} never scored a Premier League goal, so this round is a Blank (${num(res.pts)})` : res.bust ? `${res.gap} over the target = ${num(res.pts)} points` : res.gap === 0 ? "Exact hit = 30 points" : res.gap > res.zone ? `${res.gap} short. You needed to be within ${res.zone} to score` : `${res.gap} short = ${res.pts} point${res.pts === 1 ? "" : "s"}`}</div>
+    ${mind ? `<div class="mind">${res.gap === 0 && !res.bust ? "Another way to hit it" : "The game had in mind"}: ${mind}</div>` : ""}
+    ${vsFriend ? `<div class="round-msg">${vsFriend}</div>` : ""}
+    <pre class="share" id="share-text">${esc(share)}</pre>
+    <div class="actions"><button class="btn primary" id="challenge">Copy challenge link</button><button class="btn" id="share">Copy breakdown</button></div>
+    <p class="hint-line">The challenge link gives a friend this same target and your score to beat, without showing your players. The breakdown shows your players and goals.</p>
+  </section>`;
+  $("#share").onclick = () => copy(share, $("#share-text"));
+  $("#challenge").onclick = () => copy(challenge, $("#share-text"));
+  $("#next").onclick = () => soloNew();
+  $("#next").focus({ preventScroll: true });
+}
+
+// ---------------------------------------------------------------- head to head
+const h2h = { setup: store.get("h2h", { a: "", b: "", fmt: "bo5" }), m: null };
+
+function renderSetup() {
+  const st = h2h.setup;
+  view.innerHTML = `<section class="panel">
+    <h2>Head-to-head</h2>
+    <p class="hint-line" style="margin:0">Pass one phone between you. Same target each round, picks stay secret until both have chosen. Both players score points for how close they get, and going over loses points.</p>
+    <div class="two">
+      <div class="field"><label for="pa">Player 1</label><input id="pa" maxlength="16" placeholder="Player 1" value="${esc(st.a)}"></div>
+      <div class="field"><label for="pb">Player 2</label><input id="pb" maxlength="16" placeholder="Player 2" value="${esc(st.b)}"></div>
+    </div>
+    <div class="field"><span class="fl">Match</span>
+      <div class="seg" role="group" aria-label="Match length">
+        <button data-fmt="bo5" aria-pressed="${st.fmt === "bo5"}">Best of 5 (points)</button>
+        <button data-fmt="ft5" aria-pressed="${st.fmt === "ft5"}">First to 5 wins</button></div></div>
+    <div class="field"><span class="fl">Players</span>${repeatToggle(!!st.noRepeat, "hr")}
+      <span class="hint-line">${st.noRepeat ? "Hard: you can't pick a player you've already used this match." : "Pick anyone, any round."}</span></div>
+    <button class="btn primary" id="start">Start match</button>
+  </section>`;
+  view.querySelectorAll("[data-fmt]").forEach(b => b.onclick = () => { st.fmt = b.dataset.fmt; save(); renderSetup(); });
+  view.querySelectorAll("[data-rep]").forEach(b => b.onclick = () => { st.noRepeat = b.dataset.rep === "1"; save(); renderSetup(); });
+  function save() { st.a = $("#pa") ? $("#pa").value.trim() : st.a; st.b = $("#pb") ? $("#pb").value.trim() : st.b; store.set("h2h", st); }
+  $("#pa").oninput = $("#pb").oninput = save;
+  $("#start").onclick = () => {
+    save();
+    h2h.m = { names: [st.a || "Player 1", st.b || "Player 2"], fmt: st.fmt, noRepeat: !!st.noRepeat,
+      used: [new Set(), new Set()], score: [0, 0], pts: [0, 0], rounds: [], recent: [], cur: null };
+    h2hRound();
+  };
+}
+
+function h2hRound() {
+  const m = h2h.m;
+  const t = newTarget(m.recent);
+  m.recent.push(t.target);
+  const first = m.rounds.length % 2;
+  m.cur = { ...t, picks: [[], []], order: [first, 1 - first], step: 0, phase: "ready" };
+  renderH2H();
+}
+
+// Best of 5: five rounds, most points wins (extra rounds if level).
+// First to 5: the player with more points in a round wins it; first to 5 rounds.
+const fmtName = m => m.fmt === "bo5" ? "5 rounds · most points wins" : "First to 5 round wins";
+const lead = m => m.fmt === "bo5" ? m.pts : m.score;
+const matchOver = m => m.fmt === "bo5" ? m.rounds.length >= 5 && m.pts[0] !== m.pts[1] : Math.max(...m.score) >= 5;
+const scoreLine = m => `${num(lead(m)[0])} – ${num(lead(m)[1])}`;
+function scoreHTML(m) {
+  const n = m.rounds.length + (m.cur && m.cur.phase !== "done" ? 1 : 0);
+  return `<section class="score"><span class="nm">${esc(m.names[0])}</span>
+    <span class="sc">${scoreLine(m)}</span><span class="nm">${esc(m.names[1])}</span>
+    <span class="fmt">${m.fmt === "bo5" ? "Points" : `Rounds won · points ${num(m.pts[0])} – ${num(m.pts[1])}`} · ${fmtName(m)}${m.noRepeat ? " · No repeats" : ""} · Round ${n}${m.fmt === "bo5" && n <= 5 ? " of 5" : ""}</span></section>`;
+}
+
+function renderH2H() {
+  const m = h2h.m, c = m.cur;
+  if (!m) return renderSetup();
+  const who = c.order[c.step];
+  if (c.phase === "ready") {
+    view.innerHTML = `<div style="display:flex;flex-direction:column;gap:14px">${scoreHTML(m)}
+      <section class="panel handoff"><h2>${esc(m.names[who])}, you're up</h2>
+      <p>${c.step === 0 ? "Pick in secret, then pass the phone." : `${esc(m.names[c.order[0]])} has locked in. No peeking at their picks.`}</p>
+      <button class="btn go" id="go">Show me the target</button></section>
+      <button class="btn ghost" id="quit">End match</button></div>`;
+    $("#go").onclick = () => { c.phase = "pick"; renderH2H(); };
+    $("#quit").onclick = () => { h2h.m = null; renderSetup(); };
+    return;
+  }
+  if (c.phase === "pick") {
+    view.innerHTML = `<div style="display:flex;flex-direction:column;gap:14px">${scoreHTML(m)}
+      ${boardHTML(c.target, `<div class="who">${esc(m.names[who])} picking</div>`)}
+      <div id="pick"></div>
+      <div class="actions"><button class="btn primary" id="lock" disabled>Lock in picks</button></div></div>`;
+    const picks = c.picks[who];
+    picker($("#pick"), { id: "h2h-search", picks, pool: ALL, used: m.noRepeat ? m.used[who] : null, onChange: sync });
+    function sync() {
+      $("#lock").disabled = picks.length < 3;
+      $("#gapline").textContent = picks.length < 3 ? `Pick ${3 - picks.length} more` : `${picks.length} picked · ready`;
+    }
+    sync();
+    $("#lock").onclick = () => {
+      picks.forEach(p => m.used[who].add(p.id));
+      if (c.step === 0) { c.step = 1; c.phase = "ready"; } else c.phase = "reveal";
+      renderH2H(); window.scrollTo({ top: 0 });
+    };
+    return;
+  }
+  // reveal / done
+  const res = [0, 1].map(i => grade(c.target, c.picks[i]));
+  const tot = [0, 1].map(i => c.picks[i].reduce((a, p) => a + p.g, 0));
+  const side = i => `<div class="side-res" id="side${i}"><h3>${esc(m.names[i])}</h3>
+    <ol>${c.picks[i].map(p => `<li><span>${esc(p.n)}</span><span class="gv">${p.g}</span></li>`).join("")}</ol>
+    <div class="tt" id="tt${i}">?</div><div class="tl" id="tl${i}">&nbsp;</div></div>`;
+  view.innerHTML = `<div style="display:flex;flex-direction:column;gap:14px">${scoreHTML(m)}
+    <section class="board"><div><div class="lab">Target</div><div class="num">${c.target}</div></div></section>
+    <div class="vs">${side(0)}${side(1)}</div>
+    <div id="rmsg"></div></div>`;
+  const showSide = i => {
+    $(`#tt${i}`).textContent = tot[i];
+    $(`#tl${i}`).innerHTML = `<span class="lbl ${res[i].cls}">${res[i].label}</span> · ${gapText(res[i])}<br><b>${signed(res[i].pts)} pts</b>`;
+  };
+  const conclude = () => {
+    let w = -1;
+    w = res[0].pts > res[1].pts ? 0 : res[1].pts > res[0].pts ? 1 : -1;
+    if (c.phase !== "done") {
+      c.phase = "done"; if (w >= 0) m.score[w]++;
+      m.pts[0] += res[0].pts; m.pts[1] += res[1].pts;
+      m.rounds.push({ target: c.target, picks: c.picks, tot, res, w, combo: c.combo });
+    }
+    if (w >= 0) $(`#side${w}`).classList.add("win");
+    const over = matchOver(m);
+    const msg = w >= 0 ? `${esc(m.names[w])} takes the round` : res[0].bust && res[1].bust ? "Both bust" : "Dead level";
+    const mind = c.combo ? c.combo.map(p => `<b>${esc(p.n)}</b> ${p.g}`).join(" + ") + ` = ${c.target}` : "";
+    $("#rmsg").innerHTML = `<section class="result"><p class="round-msg">${msg}</p>
+      ${mind ? `<div class="mind">The game had in mind: ${mind}</div>` : ""}
+      <div class="actions"><button class="btn go" id="nr">${over ? "See the match summary" : "Next round"}</button></div></section>`;
+    $("#nr").onclick = () => { if (over) renderSummary(); else { h2hRound(); window.scrollTo({ top: 0 }); } };
+    view.querySelector(".score").outerHTML = scoreHTML(m);
+  };
+  if (c.phase === "done") {
+    view.querySelectorAll(".gv").forEach(g => g.classList.add("on")); showSide(0); showSide(1); conclude(); return;
+  }
+  const vsEl = $(".vs");
+  const live = () => vsEl.isConnected;  // stop if the player switched mode mid-reveal
+  (async () => {
+    for (const i of c.order) {
+      const gv = view.querySelectorAll(`#side${i} .gv`);
+      for (const g of gv) { await wait(550); if (!live()) return; g.classList.add("on"); }
+      await wait(300); if (!live()) return; showSide(i);
+    }
+    await wait(400); if (live()) conclude();
+  })();
+}
+
+function summaryText(m) {
+  const L = lead(m), w = L[0] > L[1] ? 0 : 1;
+  const lines = [`On Target 🎯 Head-to-head (${m.fmt === "bo5" ? "Best of 5" : "First to 5"})`,
+    `🏆 ${m.names[w]} beat ${m.names[1 - w]} ${num(L[w])} – ${num(L[1 - w])}${m.fmt === "bo5" ? " pts" : ""}`, ""];
+  m.rounds.forEach((r, k) => {
+    lines.push(`Round ${k + 1} · Target ${r.target} · ${r.w >= 0 ? m.names[r.w] + " wins" : "level"}`);
+    [0, 1].forEach(i => {
+      lines.push(`${m.names[i]}: ${r.tot[i]} (${gapText(r.res[i])}) ${signed(r.res[i].pts)} pts`);
+      lines.push(`   ${r.picks[i].map(p => `${p.n} ${p.g}`).join(", ")}`);
+    });
+    lines.push("");
+  });
+  return lines.join("\n").trim();
+}
+
+function renderSummary() {
+  const m = h2h.m, L = lead(m), w = L[0] > L[1] ? 0 : 1;
+  const text = summaryText(m);
+  view.innerHTML = `<div style="display:flex;flex-direction:column;gap:14px">
+    <section class="board"><div><div class="lab">Match won by</div><div class="num" style="font-size:clamp(2.6rem,13vw,4rem);overflow-wrap:anywhere">${esc(m.names[w])}</div></div>
+      <div class="side"><div class="lab">Final</div><div class="tot">${num(L[w])} – ${num(L[1 - w])}</div>${m.fmt === "bo5" ? `<div class="gap">points</div>` : ""}</div></section>
+    <section class="panel"><h2>Round by round</h2>
+      <ol class="log">${m.rounds.map((r, k) => `<li><div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap"><b>Round ${k + 1} · Target ${r.target}</b>
+        <span class="tag">${r.w >= 0 ? esc(m.names[r.w]) : "Level"}</span></div>
+        ${[0, 1].map(i => `<div>${esc(m.names[i])}: <b>${r.tot[i]}</b> (${r.res[i].bust ? "bust" : gapText(r.res[i])}) <b>${signed(r.res[i].pts)}</b> · <span class="hint-line">${r.picks[i].map(p => esc(p.n) + " " + p.g).join(", ")}</span></div>`).join("")}
+      </li>`).join("")}</ol>
+      <pre class="share" id="share-text">${esc(text)}</pre>
+      <div class="actions"><button class="btn primary" id="share">Copy summary</button><button class="btn" id="again">Rematch</button><button class="btn ghost" id="new">New players</button></div>
+    </section></div>`;
+  $("#share").onclick = () => copy(text, $("#share-text"));
+  $("#again").onclick = () => { Object.assign(m, { score: [0, 0], pts: [0, 0], rounds: [], used: [new Set(), new Set()] }); h2hRound(); };
+  $("#new").onclick = () => { h2h.m = null; renderSetup(); };
+}
+
+// ---------------------------------------------------------------- mode switch
+const view = $("#view");
+let mode = store.get("mode", "solo");
+function setMode(mo) {
+  mode = mo; store.set("mode", mo);
+  $("#mode-solo").setAttribute("aria-pressed", mo === "solo");
+  $("#mode-h2h").setAttribute("aria-pressed", mo === "h2h");
+  if (mo === "solo") { if (!solo.round) soloNew(); else renderSolo(); }
+  else if (h2h.m) { if (h2h.m.cur && h2h.m.cur.phase === "done" && matchOver(h2h.m)) renderSummary(); else renderH2H(); }
+  else renderSetup();
+}
+$("#mode-solo").onclick = () => setMode("solo");
+$("#mode-h2h").onclick = () => setMode("h2h");
+if (!ALL.length) view.innerHTML = `<section class="panel"><h2>Player list missing</h2><p class="hint-line">players.js didn't load, so there's nobody to pick.</p></section>`;
+else {
+  const ch = readChallenge();
+  if (ch) { mode = "solo"; soloNew(ch); setMode("solo"); }
+  else setMode(mode);
+}
+})();
+</script>
+
+</body>
+</html>
