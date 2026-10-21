@@ -242,7 +242,7 @@ button:disabled { cursor: not-allowed; opacity: .45; }
     <div class="sheet-head"><h2 id="rules-title">How to play</h2><button class="close" id="close-rules" aria-label="Close">×</button></div>
     <ol class="steps">
       <li><b>You get a target number.</b> Something like 50.</li>
-      <li><b>Pick 3 to 5 Premier League players.</b> Anyone who has played since 1992. Their career Premier League goals stay hidden while you pick.</li>
+      <li><b>Pick 1 to 5 Premier League players.</b> Anyone who has played since 1992. Their career Premier League goals stay hidden while you pick.</li>
       <li><b>Press Reveal.</b> Their goals are added up. Get as close to the target as you can without going over.</li>
     </ol>
     <div class="example">
@@ -252,7 +252,9 @@ button:disabled { cursor: not-allowed; opacity: .45; }
     </div>
     <h3>Scoring</h3>
     <table class="pts-table">
-      <tr><td>Exact hit</td><td>30</td></tr>
+      <tr><td>Exact hit with 1 player</td><td>50</td></tr>
+      <tr><td>Exact hit with 2 players</td><td>40</td></tr>
+      <tr><td>Exact hit with 3 or more</td><td>30</td></tr>
       <tr><td>1 short</td><td>20</td></tr>
       <tr><td>2 short</td><td>19</td></tr>
       <tr><td>10 short</td><td>11</td></tr>
@@ -307,8 +309,9 @@ const store = {
 // ones (a third of the target, at least 5) and wider on big ones (a tenth of it).
 const zone = target => Math.max(5, Math.min(Math.round(target / 3), Math.max(20, Math.round(target / 10))));
 
+const EXACT = [30, 50, 40, 30]; // by number of players, 3+ all score 30
 function grade(target, picks) {
-  // Exact = 30. Short by 1 = 20, sliding down to 1 point at the edge of the zone.
+  // Exact = 30, or 40 with two players and 50 with one. Short by 1 = 20, sliding down to 1 point at the edge of the zone.
   // Over loses a point per goal over, capped at -20. One player on 0 goals is
   // free; two or more make the round a Blank, which can't score above 0.
   const total = picks.reduce((a, p) => a + p.g, 0), W = zone(target);
@@ -316,7 +319,7 @@ function grade(target, picks) {
   if (total > target) { const gap = total - target; r = { bust: true, gap, pts: -Math.min(gap, 20), label: "Bust", cls: "bust" }; }
   else {
     const gap = target - total;
-    const pts = gap === 0 ? 30 : gap > W ? 0 : Math.round(20 - 19 * (gap - 1) / Math.max(1, W - 1));
+    const pts = gap === 0 ? EXACT[Math.min(picks.length, 3)] : gap > W ? 0 : Math.round(20 - 19 * (gap - 1) / Math.max(1, W - 1));
     r = gap === 0 ? { gap, pts, label: "Bullseye", cls: "bullseye" }
       : gap <= Math.ceil(W / 4) ? { gap, pts, label: "Treble", cls: "treble" }
       : gap <= Math.ceil(W * .75) ? { gap, pts, label: "Double", cls: "double" }
@@ -331,11 +334,11 @@ function grade(target, picks) {
 const num = n => n < 0 ? "−" + -n : String(n);
 const signed = n => (n > 0 ? "+" : "") + num(n);
 const tone = n => n > 0 ? "pos" : n < 0 ? "neg" : "zero";
-// One player's line in a round card: name, total and gap, points, then their picks.
 // Collapsed round card: round, target, outcome and points on one line; tap to open the picks.
 const roundCard = (k, target, tag, pts, body) => `<li><details class="rcard"><summary class="rhead">
   <span class="rt"><b>Round ${k + 1}</b> <span class="tgt">· Target ${target}</span></span><span class="chev" aria-hidden="true"></span>
   <span class="rpts"><span class="tag">${tag}</span>${pts}</span></summary>${body}</details></li>`;
+// One player's line in a round card: name, total and gap, points, then their picks.
 const playerRow = (name, r, picks) => `<div class="prow"><span class="who">${esc(name)}</span>
   <span class="pp ${tone(r.pts)}">${signed(r.pts)}</span>
   <span class="how">${r.skipped ? "Skipped" : `${r.total} goals · ${r.blank ? "Blank, two players on 0" : r.label + ", " + gapText(r)}`}</span>
@@ -460,7 +463,7 @@ function picker(root, opts) {
   const renderCards = () => {
     cards.innerHTML = Array.from({ length: 5 }, (_, i) => {
       const p = picks[i];
-      if (!p) return `<div class="card empty ${i < 3 ? "req" : ""}"><div class="in"><div class="face front">${i < 3 ? "Pick " + (i + 1) : "Optional"}</div></div></div>`;
+      if (!p) return `<div class="card empty ${i < 1 ? "req" : ""}"><div class="in"><div class="face front">${i < 1 ? "Pick 1" : "Optional"}</div></div></div>`;
       return `<div class="card" data-i="${i}"><div class="in">
         <div class="face front">${locked ? "<span></span>" : `<button class="x" data-rm="${i}" aria-label="Remove ${esc(p.n)}">×</button>`}
           <div class="pn" lang="en">${esc(p.n)}</div><div class="pc">${esc(p.c.split(",")[0] || "")}</div></div>
@@ -524,7 +527,7 @@ function picker(root, opts) {
 function boardHTML(target, extra = "") {
   return `<section class="board" aria-live="polite">
     <div><div class="lab">Target</div><div class="num">${target}</div><div class="lab">Scores within ${zone(target)}</div></div>
-    <div class="side"><div class="lab">Your total</div><div class="tot" id="tot">?</div><div class="gap" id="gapline">3 to 5 players</div></div>
+    <div class="side"><div class="lab">Your total</div><div class="tot" id="tot">?</div><div class="gap" id="gapline">1 to 5 players</div></div>
     ${extra}</section>`;
 }
 
@@ -602,9 +605,9 @@ function renderSolo() {
   const pk = picker($("#pick"), { id: "solo-search", picks: r.picks, pool: PICKABLE, used: g.noRepeat ? g.used : null, onChange: sync });
   const revealBtn = $("#reveal"), skipBtn = $("#skip");
   function sync() {
-    revealBtn.disabled = r.picks.length < 3;
+    revealBtn.disabled = r.picks.length < 1;
     skipBtn.disabled = r.picks.length > 0;
-    $("#gapline").textContent = r.picks.length < 3 ? `Pick ${3 - r.picks.length} more` : `${r.picks.length} picked · ready`;
+    $("#gapline").textContent = r.picks.length ? `${r.picks.length} picked · ready` : "1 to 5 players";
   }
   sync();
   skipBtn.onclick = () => {
@@ -637,7 +640,7 @@ function renderSolo() {
 function resultText(res) {
   return res.blank ? `${res.blank.map(p => esc(p.n)).join(" and ")} have never scored a Premier League goal. You can only use one player on 0, so this round is a Blank: ${num(res.pts)} points.`
     : res.bust ? `${res.gap} over the target = ${num(res.pts)} points`
-    : res.gap === 0 ? "Exact hit = 30 points"
+    : res.gap === 0 ? (res.pts > 30 ? `Exact hit with ${res.pts === 50 ? "one player" : "two players"} = ${res.pts} points` : "Exact hit = 30 points")
     : res.gap > res.zone ? `${res.gap} short. You needed to be within ${res.zone} to score`
     : `${res.gap} short = ${res.pts} point${res.pts === 1 ? "" : "s"}`;
 }
@@ -777,8 +780,8 @@ function renderH2H() {
     const picks = c.picks[who];
     picker($("#pick"), { id: "h2h-search", picks, pool: PICKABLE, used: m.noRepeat ? m.used[who] : null, onChange: sync });
     function sync() {
-      $("#lock").disabled = picks.length < 3;
-      $("#gapline").textContent = picks.length < 3 ? `Pick ${3 - picks.length} more` : `${picks.length} picked · ready`;
+      $("#lock").disabled = picks.length < 1;
+      $("#gapline").textContent = picks.length ? `${picks.length} picked · ready` : "1 to 5 players";
     }
     sync();
     $("#lock").onclick = () => {
