@@ -2,7 +2,7 @@
 
 Pick 3 to 5 Premier League players whose career PL goals add up as close to the target as you can, without going over. Play solo or head-to-head on one phone.
 
-Play: https://mhnr73-cell.github.io/on-target/
+Play: https://ontargetgame.github.io/
 
 ## How it's built
 
