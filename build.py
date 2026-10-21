@@ -36,7 +36,7 @@ def clubs_and_years(p):
 rows = []
 for p in doc["players"]:
     c, y = clubs_and_years(p)
-    rows.append([p["name"], p["goals"], p.get("apps") or 0, c, y])
+    rows.append([p["name"], p["goals"], p.get("apps") or 0, c, y, p.get("position") or ""])
 data = {"asof": doc["generated_at"][:10], "players": rows}
 (HERE / "players.js").write_text("window.FD_DATA=" + json.dumps(data, ensure_ascii=False, separators=(",", ":")) + ";\n")
 

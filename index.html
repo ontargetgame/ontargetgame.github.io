@@ -182,7 +182,7 @@ button:disabled { cursor: not-allowed; opacity: .45; }
     </div>
   </header>
   <main id="view"></main>
-  <p class="foot">Career Premier League goals since 1992, as of <span id="asof"></span>. Scoring: exact 30 points. 1 short 20, sliding down to 1 point at the edge of the scoring zone shown under the target. Over the target loses a point per goal over (up to 20). Pick anyone who never scored a PL goal and the round is a Blank: 0 at best.</p>
+  <p class="foot">Career Premier League goals since 1992, as of <span id="asof"></span>. Scoring: exact 30 points. 1 short 20, sliding down to 1 point at the edge of the scoring zone shown under the target. Over the target loses a point per goal over (up to 20). One goalkeeper per round. Each outfield player who never scored a PL goal costs 5 points.</p>
 </div>
 <div class="toast" id="toast" hidden></div>
 
@@ -196,7 +196,7 @@ document.getElementById("asof").textContent = (window.FD_DATA && window.FD_DATA.
 const fold = s => s.normalize("NFKD").replace(/[̀-ͯ]/g, "")
   .replace(/[øØ]/g, "o").replace(/[æÆ]/g, "ae").replace(/ß/g, "ss").replace(/[łŁ]/g, "l").replace(/[đĐ]/g, "d")
   .toLowerCase().replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
-const ALL = RAW.map((r, i) => ({ id: i, n: r[0], g: r[1], a: r[2] || 0, c: r[3] || "", y: r[4] || "", f: fold(r[0]) }));
+const ALL = RAW.map((r, i) => ({ id: i, n: r[0], g: r[1], a: r[2] || 0, c: r[3] || "", y: r[4] || "", gk: r[5] === "G", f: fold(r[0]) }));
 ALL.forEach(p => { p.words = p.f.split(" "); });
 // Every player can be picked. The example answer after Reveal uses players most fans
 // know (20+ goals or 200+ appearances) when it can.
@@ -216,10 +216,10 @@ const zone = target => Math.max(5, Math.min(Math.round(target / 3), Math.max(20,
 
 function grade(target, picks) {
   // Exact = 30. Short by 1 = 20, sliding down to 1 point at the edge of the zone.
-  // Over loses a point per goal over, capped at -20. Picking anyone who never
-  // scored a PL goal is a Blank: the round can't score above 0.
+  // Over loses a point per goal over, capped at -20. Goalkeepers on 0 are a free
+  // pick (one per round); each outfield player who never scored costs 5 points.
   const total = picks.reduce((a, p) => a + p.g, 0), W = zone(target);
-  const blanks = picks.filter(p => p.g === 0);
+  const blanks = picks.filter(p => p.g === 0 && !p.gk);
   let r;
   if (total > target) { const gap = total - target; r = { bust: true, gap, pts: -Math.min(gap, 20), label: "Bust", cls: "bust" }; }
   else {
@@ -232,7 +232,7 @@ function grade(target, picks) {
       : { gap, pts, label: "Missed the board", cls: "miss" };
   }
   r.zone = W; r.total = total;
-  if (blanks.length) Object.assign(r, { blank: blanks, pts: Math.min(r.pts, 0), label: "Blank", cls: "bust" });
+  if (blanks.length) Object.assign(r, { blank: blanks, pts: r.pts - 5 * blanks.length });
   return r;
 }
 const num = n => n < 0 ? "−" + -n : String(n);
@@ -312,7 +312,7 @@ function newTarget(recent, fixed) {
 // ---------------------------------------------------------------- helpers
 const $ = (s, el = document) => el.querySelector(s);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-const meta = p => [p.c, p.y].filter(Boolean).join(" · ");
+const meta = p => [p.gk ? "Goalkeeper" : "", p.c, p.y].filter(Boolean).join(" · ");
 const reduced = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 const wait = ms => new Promise(r => setTimeout(r, reduced() ? 0 : ms));
 let toastTimer;
@@ -370,12 +370,14 @@ function picker(root, opts) {
     if (!hits.length) { list.innerHTML = `<li class="empty">No player called “${esc(q)}”.</li>`; return; }
     list.innerHTML = hits.map((p, i) => {
       const taken = picks.includes(p), used = !taken && opts.used && opts.used.has(p.id);
-      return `<li><button data-id="${p.id}" class="${i === hl ? "hl" : ""}" ${taken || used || picks.length >= 5 ? "disabled" : ""}>
-        <span class="n">${esc(p.n)}${taken ? " · picked" : used ? " · used in an earlier round" : ""}</span><span class="m">${esc(meta(p))}</span></button></li>`;
+      const keeperFull = !taken && p.gk && picks.some(q => q.gk);
+      return `<li><button data-id="${p.id}" class="${i === hl ? "hl" : ""}" ${taken || used || keeperFull || picks.length >= 5 ? "disabled" : ""}>
+        <span class="n">${esc(p.n)}${taken ? " · picked" : used ? " · used in an earlier round" : keeperFull ? " · one keeper per round" : ""}</span><span class="m">${esc(meta(p))}</span></button></li>`;
     }).join("");
   };
   const add = p => {
     if (locked || picks.length >= 5 || picks.includes(p) || (opts.used && opts.used.has(p.id))) return;
+    if (p.gk && picks.some(q => q.gk)) { toast("Only one goalkeeper per round"); return; }
     picks.push(p); input.value = ""; hits = []; hl = -1;
     renderList(); renderCards(); opts.onChange();
     if (picks.length < 5) input.focus();
@@ -527,7 +529,7 @@ function finishSolo(pk, again) {
   $("#acts").innerHTML = `<button class="btn go" id="next">Next target</button>`;
   $("#res").innerHTML = `<section class="result">
     <div class="verdict"><span class="lbl ${res.cls}">${res.label}</span><span class="pts">${signed(res.pts)} pts</span></div>
-    <div class="hint-line">${res.blank ? `${res.blank.map(p => esc(p.n)).join(" and ")} never scored a Premier League goal, so this round is a Blank (${num(res.pts)})` : res.bust ? `${res.gap} over the target = ${num(res.pts)} points` : res.gap === 0 ? "Exact hit = 30 points" : res.gap > res.zone ? `${res.gap} short. You needed to be within ${res.zone} to score` : `${res.gap} short = ${res.pts} point${res.pts === 1 ? "" : "s"}`}</div>
+    <div class="hint-line">${res.blank ? `${res.blank.map(p => esc(p.n)).join(" and ")} never scored a Premier League goal: −${5 * res.blank.length} points. Round total ${num(res.pts)}` : res.bust ? `${res.gap} over the target = ${num(res.pts)} points` : res.gap === 0 ? "Exact hit = 30 points" : res.gap > res.zone ? `${res.gap} short. You needed to be within ${res.zone} to score` : `${res.gap} short = ${res.pts} point${res.pts === 1 ? "" : "s"}`}</div>
     ${mind ? `<div class="mind">${res.gap === 0 && !res.bust ? "Another way to hit it" : "The game had in mind"}: ${mind}</div>` : ""}
     ${vsFriend ? `<div class="round-msg">${vsFriend}</div>` : ""}
     <pre class="share" id="share-text">${esc(share)}</pre>
