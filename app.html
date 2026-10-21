@@ -55,6 +55,7 @@ button:disabled { cursor: not-allowed; opacity: .45; }
 .bar { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
 
 /* stats */
+.stats.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .stats { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 8px 4px; }
 .stat { text-align: center; min-width: 0; }
 .stat b { display: block; font: 800 1.35rem/1.1 var(--display); font-variant-numeric: tabular-nums; }
@@ -154,6 +155,27 @@ button:disabled { cursor: not-allowed; opacity: .45; }
 .tag { display: inline-block; font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; padding: 2px 7px; border-radius: 999px; background: var(--chip); }
 .foot { font-size: .75rem; color: var(--muted); text-align: center; margin: 6px 0 0; }
 
+.topr { display: flex; align-items: center; gap: 8px; }
+.help { width: 34px; height: 34px; border-radius: 50%; border: 1.5px solid var(--line); background: var(--surface); font: 800 1rem/1 var(--display); flex: none; }
+.linkish { border: 0; background: none; padding: 0; color: var(--ink); text-decoration: underline; font: inherit; }
+.overlay { position: fixed; inset: 0; z-index: 30; background: rgb(0 0 0 / .45); display: flex; align-items: flex-end; justify-content: center;
+  padding: env(safe-area-inset-top, 0px) max(0px, env(safe-area-inset-right, 0px)) 0 max(0px, env(safe-area-inset-left, 0px)); }
+.sheet { background: var(--surface); color: var(--ink); width: 100%; max-width: 560px; max-height: 92%; overflow-y: auto; border-radius: 18px 18px 0 0;
+  padding: 18px max(18px, env(safe-area-inset-right, 0px)) calc(18px + env(safe-area-inset-bottom, 0px)) max(18px, env(safe-area-inset-left, 0px));
+  display: flex; flex-direction: column; gap: 12px; }
+@media (min-width: 600px) { .overlay { align-items: center; } .sheet { border-radius: 18px; } }
+.sheet-head { display: flex; justify-content: space-between; align-items: center; }
+.sheet h2 { font: 900 1.8rem/1 var(--display); text-transform: uppercase; margin: 0; }
+.sheet h3 { font: 800 1.15rem/1 var(--display); text-transform: uppercase; letter-spacing: .02em; margin: 6px 0 0; }
+.sheet .close { border: 0; background: var(--chip); width: 34px; height: 34px; border-radius: 50%; font-size: 1.2rem; }
+.steps { margin: 0; padding: 0 0 0 22px; display: flex; flex-direction: column; gap: 8px; }
+.steps li::marker { font: 800 1rem var(--display); color: var(--red); }
+.example { background: var(--board); color: var(--board-ink); border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 3px; font-size: .95rem; }
+.ex-lab { font-size: .7rem; text-transform: uppercase; letter-spacing: .1em; opacity: .8; }
+.pts-table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+.pts-table td { padding: 7px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+.pts-table td:last-child { text-align: right; font-weight: 700; padding-left: 12px; }
+.rules-list { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 5px; font-size: .92rem; }
 @media (max-width: 380px) {
   .vs { grid-template-columns: 1fr; }
 }
@@ -168,15 +190,56 @@ button:disabled { cursor: not-allowed; opacity: .45; }
       <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="15" fill="var(--board)"/><circle cx="16" cy="16" r="10.5" fill="var(--bg)"/><circle cx="16" cy="16" r="6" fill="var(--red)"/><circle cx="16" cy="16" r="2.2" fill="var(--bg)"/></svg>
       On Target
     </h1>
-    <div class="seg" role="group" aria-label="Game mode">
-      <button id="mode-solo" aria-pressed="true">Solo</button>
-      <button id="mode-h2h" aria-pressed="false">Head-to-head</button>
+    <div class="topr">
+      <div class="seg" role="group" aria-label="Game mode">
+        <button id="mode-solo" aria-pressed="true">Solo</button>
+        <button id="mode-h2h" aria-pressed="false">Head-to-head</button>
+      </div>
+      <button class="help" id="open-rules" aria-label="How to play" title="How to play">?</button>
     </div>
   </header>
   <main id="view"></main>
-  <p class="foot">Career Premier League goals since 1992, as of <span id="asof"></span>. Scoring: exact 30 points. 1 short 20, sliding down to 1 point at the edge of the scoring zone shown under the target. Over the target loses a point per goal over (up to 20). You can use one outfield player on 0 goals; pick two and the round is a Blank (0 at best). Goalkeepers who never scored can't be picked.</p>
+  <p class="foot">Career Premier League goals since 1992, as of <span id="asof"></span>. <button class="linkish" id="foot-rules">How to play and scoring</button></p>
 </div>
 <div class="toast" id="toast" hidden></div>
+
+<div class="overlay" id="rules" hidden>
+  <section class="sheet" role="dialog" aria-modal="true" aria-labelledby="rules-title">
+    <div class="sheet-head"><h2 id="rules-title">How to play</h2><button class="close" id="close-rules" aria-label="Close">×</button></div>
+    <ol class="steps">
+      <li><b>You get a target number.</b> Something like 50.</li>
+      <li><b>Pick 3 to 5 Premier League players.</b> Anyone who has played since 1992. Their career Premier League goals stay hidden while you pick.</li>
+      <li><b>Press Reveal.</b> Their goals are added up. Get as close to the target as you can without going over.</li>
+    </ol>
+    <div class="example">
+      <div class="ex-lab">Example · Target 50</div>
+      <div>Darren Fletcher <b>23</b> + Harry Maguire <b>15</b> + Phil Neville <b>9</b> = <b>47</b></div>
+      <div>3 short → <b>18 points</b></div>
+    </div>
+    <h3>Scoring</h3>
+    <table class="pts-table">
+      <tr><td>Exact hit</td><td>30</td></tr>
+      <tr><td>1 short</td><td>20</td></tr>
+      <tr><td>Further short</td><td>Drops by about 1 a goal, down to 1 point at the edge of the scoring zone</td></tr>
+      <tr><td>Outside the zone</td><td>0</td></tr>
+      <tr><td>Over the target</td><td>−1 per goal over, at most −20</td></tr>
+    </table>
+    <p class="hint-line">The scoring zone is shown under every target. It's 20 goals for most targets, smaller for small targets and bigger for big ones.</p>
+    <h3>Players on 0 goals</h3>
+    <ul class="rules-list">
+      <li>One player who never scored a Premier League goal is fine.</li>
+      <li>Pick two or more and the round is a <b>Blank</b>: 0 points at best.</li>
+      <li>Goalkeepers who never scored can't be picked.</li>
+    </ul>
+    <h3>Ways to play</h3>
+    <ul class="rules-list">
+      <li><b>Solo:</b> play 3, 5 or 10 rounds for the highest total. Send a challenge link and a friend gets the same targets.</li>
+      <li><b>Head-to-head:</b> pass one phone between two players. Same target, secret picks. Best of 5 (most points) or first to 5 round wins.</li>
+      <li><b>No repeats:</b> an optional hard mode where you can't use the same player twice.</li>
+    </ul>
+    <button class="btn primary" id="rules-ok">Got it, let's play</button>
+  </section>
+</div>
 
 <script src="players.js"></script>
 <script>
@@ -286,14 +349,15 @@ function findCombo(T, pool) {
   return pick(found);
 }
 
+// Mostly small and mid targets so low scorers and obscure names are worth picking;
+// a big one now and then. [low, high, chance]
+const BANDS = [[10, 50, .3], [51, 120, .3], [121, 250, .25], [251, 500, .15]];
+
 function newTarget(recent, fixed) {
   if (fixed) return { target: fixed, combo: findCombo(fixed, KNOWN) || findCombo(fixed, SCORERS) };
-  // Mostly small and mid targets so low scorers and obscure names are worth picking;
-  // a big one now and then. [low, high, chance]
-  const bands = [[10, 50, .3], [51, 120, .3], [121, 250, .25], [251, 500, .15]];
   for (let tries = 0; tries < 200; tries++) {
-    let x = Math.random(), band = bands[0];
-    for (const b of bands) { band = b; if ((x -= b[2]) < 0) break; }
+    let x = Math.random(), band = BANDS[0];
+    for (const b of BANDS) { band = b; if ((x -= b[2]) < 0) break; }
     const [lo, hi] = band;
     const T = rint(lo, hi);
     if (recent.includes(T)) continue;
@@ -420,50 +484,67 @@ function boardHTML(target, extra = "") {
 
 
 // ---------------------------------------------------------------- solo
+// A solo game is 3, 5 or 10 rounds and you play for the total. Its targets come
+// from a seed, so a challenge link (#g<seed>r<rounds>[x]s<score>, x = no repeats)
+// gives a friend exactly the same targets.
 const solo = {
-  stats: { points: 0, rounds: 0, gapSum: 0, gapN: 0, streak: 0 },
-  best: store.get("best", 0),
-  bulls: store.get("bulls", 0),
-  recent: store.get("recent", []),
-  noRepeat: store.get("norepeat", false),
-  used: new Set(),  // players picked in earlier rounds this session
-  round: null,
+  setup: store.get("solo", { rounds: 5, noRepeat: false }),
+  best: store.get("bestGame", {}),  // best total per game length
+  game: null,
 };
 const repeatToggle = (on, id) => `<div class="seg" role="group" aria-label="Repeat players">
     <button data-rep="0" id="${id}-0" aria-pressed="${!on}">Normal</button>
     <button data-rep="1" id="${id}-1" aria-pressed="${on}">No repeats</button></div>`;
 
-// Challenge links: <page>#c66s18 opens target 66 with a friend's score of 18 to beat.
 const ART_URL = "https://claude.ai/artifact/TZpB1WfXGKDZwgXCEM4mSX";
 const shareBase = () => /^https?:$/.test(location.protocol) && !/claude/.test(location.hostname) ? location.origin + location.pathname : ART_URL;
 function readChallenge() {
-  const m = location.hash.match(/^#c(\d{1,3})(?:s(-?\d{1,2}))?$/);
-  if (!m || +m[1] < 3) return null;
-  return { target: +m[1], score: m[2] == null ? null : +m[2] };
+  const m = location.hash.match(/^#g(\d{1,9})r(3|5|10)(x?)(?:s(-?\d{1,3}))?$/);
+  return m ? { seed: +m[1], rounds: +m[2], noRepeat: !!m[3], score: m[4] == null ? null : +m[4] } : null;
+}
+function rng(seed) {  // mulberry32
+  return () => { seed = (seed + 0x6D2B79F5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+}
+function gameTargets(seed, n) {
+  const rand = rng(seed), out = [];
+  for (let guard = 0; out.length < n && guard < 500; guard++) {
+    let x = rand(), band = BANDS[0];
+    for (const b of BANDS) { band = b; if ((x -= b[2]) < 0) break; }
+    const T = band[0] + Math.floor(rand() * (band[1] - band[0] + 1));
+    if (!out.includes(T) && findCombo(T, SCORERS)) out.push(T);
+  }
+  return out;
 }
 
-function soloNew(challenge) {
-  const t = newTarget(solo.recent, challenge && challenge.target);
-  solo.recent = [...solo.recent, t.target].slice(-20); store.set("recent", solo.recent);
-  solo.round = { ...t, picks: [], done: false, res: null, challenge: challenge || null };
+function soloStart(ch) {
+  const st = solo.setup;
+  const n = ch ? ch.rounds : st.rounds, noRepeat = ch ? ch.noRepeat : st.noRepeat;
+  const seed = ch ? ch.seed : 1 + Math.floor(Math.random() * 999999999);
+  solo.game = { seed, n, noRepeat, challenge: ch || null, targets: gameTargets(seed, n),
+    rounds: [], used: new Set(), points: 0, over: false };
+  soloRound();
+}
+function soloRound() {
+  const g = solo.game, T = g.targets[g.rounds.length];
+  g.rounds.push({ target: T, combo: findCombo(T, KNOWN) || findCombo(T, SCORERS), picks: [], done: false, res: null });
   renderSolo();
 }
 
 function renderSolo() {
-  const s = solo.stats, r = solo.round;
-  const avg = s.gapN ? Math.round(s.gapSum / s.gapN) : "–";
+  const g = solo.game;
+  if (!g) return renderSoloSetup();
+  if (g.over) return renderSoloSummary();
+  const r = g.rounds[g.rounds.length - 1], last = g.rounds.length === g.n;
+  const best = solo.best[g.n];
   view.innerHTML = `
     <div style="display:flex;flex-direction:column;gap:14px">
-      <div class="bar">${repeatToggle(solo.noRepeat, "sr")}
-        <span class="hint-line">${solo.noRepeat ? `Each player once per session${solo.used.size ? ` · ${solo.used.size} used` : ""}` : "Pick anyone, any round"}</span></div>
-      <section class="stats" aria-label="Session stats">
-        <div class="stat"><b>${num(s.points)}</b><span>Points</span></div>
-        <div class="stat"><b>${s.rounds}</b><span>Rounds</span></div>
-        <div class="stat"><b>${avg}</b><span>Avg gap</span></div>
-        <div class="stat"><b>${s.streak}</b><span>Streak</span></div>
-        <div class="stat"><b>${solo.best}</b><span>Best</span></div>
+      ${g.challenge ? `<div class="challenge"><b>Challenge</b> ${g.challenge.score == null ? `A friend sent you these ${g.n} targets.` : `A friend scored <b>${num(g.challenge.score)}</b> over these ${g.n} targets. Beat it.`}${g.noRepeat ? " No repeats." : ""}</div>` : ""}
+      <section class="stats three" aria-label="Game so far">
+        <div class="stat"><b>${g.rounds.length}/${g.n}</b><span>Round</span></div>
+        <div class="stat"><b>${num(g.points)}</b><span>Points</span></div>
+        <div class="stat"><b>${best == null ? "–" : num(best)}</b><span>Best ${g.n}-round</span></div>
       </section>
-      ${r.challenge ? `<div class="challenge"><b>Challenge</b> ${r.challenge.score == null ? "A friend sent you this target." : `A friend scored <b>${num(r.challenge.score)}</b> on this target. Beat it.`}</div>` : ""}
       ${boardHTML(r.target)}
       <div id="pick"></div>
       <div class="actions" id="acts">
@@ -472,12 +553,7 @@ function renderSolo() {
       </div>
       <div id="res"></div>
     </div>`;
-  view.querySelectorAll("[data-rep]").forEach(b => b.onclick = () => {
-    solo.noRepeat = b.dataset.rep === "1"; store.set("norepeat", solo.noRepeat);
-    if (solo.noRepeat && !r.done) r.picks.splice(0, r.picks.length, ...r.picks.filter(p => !solo.used.has(p.id)));
-    renderSolo();
-  });
-  const pk = picker($("#pick"), { id: "solo-search", picks: r.picks, pool: PICKABLE, used: solo.noRepeat ? solo.used : null, onChange: sync });
+  const pk = picker($("#pick"), { id: "solo-search", picks: r.picks, pool: PICKABLE, used: g.noRepeat ? g.used : null, onChange: sync });
   const revealBtn = $("#reveal"), skipBtn = $("#skip");
   function sync() {
     revealBtn.disabled = r.picks.length < 3;
@@ -486,56 +562,95 @@ function renderSolo() {
   }
   sync();
   skipBtn.onclick = () => {
-    s.rounds++; s.streak = 0; soloNew(); toast("Skipped. 0 points, streak reset");
+    r.res = { skipped: true, pts: 0, label: "Skipped", cls: "miss", gap: r.target, total: 0 }; r.done = true;
+    soloNext();
   };
   revealBtn.onclick = async () => {
     revealBtn.disabled = true; skipBtn.disabled = true;
     await pk.reveal(run => { $("#tot").textContent = run; });
-    finishSolo(pk);
-  };
-  if (r.done) { pk.showAll(); finishSolo(pk, true); }
-}
-
-function finishSolo(pk, again) {
-  const s = solo.stats, r = solo.round;
-  const total = r.picks.reduce((a, p) => a + p.g, 0);
-  if (!again) {
     r.res = grade(r.target, r.picks); r.done = true;
-    r.picks.forEach(p => solo.used.add(p.id));
-    s.rounds++; s.points += r.res.pts;
-    if (!r.res.bust) { s.gapSum += r.res.gap; s.gapN++; }
-    s.streak = !r.res.bust && !r.res.blank && r.res.label !== "Missed the board" && r.res.label !== "On the board" ? s.streak + 1 : 0;
-    if (s.streak > solo.best) { solo.best = s.streak; store.set("best", solo.best); }
-    if (r.res.gap === 0 && !r.res.bust) { solo.bulls++; store.set("bulls", solo.bulls); }
+    r.picks.forEach(p => g.used.add(p.id));
+    g.points += r.res.pts;
     if (mode === "solo") renderSolo();
-    return;
-  }
+  };
+  if (!r.done) return;
+  pk.showAll();
   const res = r.res;
-  $("#tot").textContent = total;
+  $("#tot").textContent = res.total;
   $("#gapline").textContent = gapText(res);
-  const share = [`On Target 🎯 Target: ${r.target}`, "",
-    ...r.picks.map(p => `${p.n} ${p.g}`), "",
-    `Total: ${total} (${gapText(res)})`,
-    `${res.label}: ${signed(res.pts)} pts`].join("\n");
-  // The challenge text leaves the players out so it doesn't give the answer away.
-  const challenge = `I scored ${signed(res.pts)} on target ${r.target} in On Target 🎯 Can you beat it? ${shareBase()}#c${r.target}s${res.pts}`;
-  const vsFriend = r.challenge && r.challenge.score != null
-    ? (res.pts > r.challenge.score ? `You beat your friend's ${num(r.challenge.score)}.` : res.pts < r.challenge.score ? `Your friend's ${num(r.challenge.score)} wins this one.` : `Level with your friend on ${num(r.challenge.score)}.`) : "";
   const mind = r.combo ? r.combo.map(p => `<b>${esc(p.n)}</b> ${p.g}`).join(" + ") + ` = ${r.target}` : "";
-  $("#acts").innerHTML = `<button class="btn go" id="next">Next target</button>`;
+  $("#acts").innerHTML = `<button class="btn go" id="next">${last ? "See final score" : "Next round"}</button>`;
   $("#res").innerHTML = `<section class="result">
     <div class="verdict"><span class="lbl ${res.cls}">${res.label}</span><span class="pts">${signed(res.pts)} pts</span></div>
-    <div class="hint-line">${res.blank ? `${res.blank.map(p => esc(p.n)).join(" and ")} have never scored a Premier League goal. You can only use one player on 0, so this round is a Blank: ${num(res.pts)} points.` : res.bust ? `${res.gap} over the target = ${num(res.pts)} points` : res.gap === 0 ? "Exact hit = 30 points" : res.gap > res.zone ? `${res.gap} short. You needed to be within ${res.zone} to score` : `${res.gap} short = ${res.pts} point${res.pts === 1 ? "" : "s"}`}</div>
+    <div class="hint-line">${resultText(res)}</div>
     ${mind ? `<div class="mind">${res.gap === 0 && !res.bust ? "Another way to hit it" : "The game had in mind"}: ${mind}</div>` : ""}
-    ${vsFriend ? `<div class="round-msg">${vsFriend}</div>` : ""}
-    <pre class="share" id="share-text">${esc(share)}</pre>
-    <div class="actions"><button class="btn primary" id="challenge">Copy challenge link</button><button class="btn" id="share">Copy breakdown</button></div>
-    <p class="hint-line">The challenge link gives a friend this same target and your score to beat, without showing your players. The breakdown shows your players and goals.</p>
   </section>`;
+  $("#next").onclick = soloNext;
+  $("#next").focus({ preventScroll: true });
+}
+function resultText(res) {
+  return res.blank ? `${res.blank.map(p => esc(p.n)).join(" and ")} have never scored a Premier League goal. You can only use one player on 0, so this round is a Blank: ${num(res.pts)} points.`
+    : res.bust ? `${res.gap} over the target = ${num(res.pts)} points`
+    : res.gap === 0 ? "Exact hit = 30 points"
+    : res.gap > res.zone ? `${res.gap} short. You needed to be within ${res.zone} to score`
+    : `${res.gap} short = ${res.pts} point${res.pts === 1 ? "" : "s"}`;
+}
+function soloNext() {
+  const g = solo.game;
+  if (g.rounds.length < g.n) { soloRound(); window.scrollTo({ top: 0 }); return; }
+  g.over = true;
+  if (solo.best[g.n] == null || g.points > solo.best[g.n]) { g.newBest = solo.best[g.n] != null; solo.best[g.n] = g.points; store.set("bestGame", solo.best); }
+  renderSolo(); window.scrollTo({ top: 0 });
+}
+
+function renderSoloSetup() {
+  const st = solo.setup;
+  view.innerHTML = `<section class="panel">
+    <h2>Solo</h2>
+    <p class="hint-line" style="margin:0">Land as close as you can to each target. Your score is your total over the game, and you can send a friend the same targets to beat it.</p>
+    <div class="field"><span class="fl">Rounds</span>
+      <div class="seg" role="group" aria-label="Number of rounds">
+        ${[3, 5, 10].map(n => `<button data-n="${n}" aria-pressed="${st.rounds === n}">${n} rounds</button>`).join("")}</div></div>
+    <div class="field"><span class="fl">Players</span>${repeatToggle(!!st.noRepeat, "sr")}
+      <span class="hint-line">${st.noRepeat ? "Hard: each player can only be used once per game." : "Pick anyone, any round."}</span></div>
+    ${Object.keys(solo.best).length ? `<p class="hint-line" style="margin:0">Your best: ${[3, 5, 10].filter(n => solo.best[n] != null).map(n => `${num(solo.best[n])} over ${n} rounds`).join(" · ")}</p>` : ""}
+    <button class="btn primary" id="solo-start">Start game</button>
+  </section>`;
+  const save = () => store.set("solo", st);
+  view.querySelectorAll("[data-n]").forEach(b => b.onclick = () => { st.rounds = +b.dataset.n; save(); renderSoloSetup(); });
+  view.querySelectorAll("[data-rep]").forEach(b => b.onclick = () => { st.noRepeat = b.dataset.rep === "1"; save(); renderSoloSetup(); });
+  $("#solo-start").onclick = () => soloStart();
+}
+
+function renderSoloSummary() {
+  const g = solo.game, ch = g.challenge;
+  const lines = [`On Target 🎯 ${g.n} rounds${g.noRepeat ? ", no repeats" : ""}: ${signed(g.points)} pts`, ""];
+  g.rounds.forEach((r, k) => {
+    lines.push(`Round ${k + 1} · Target ${r.target}: ${r.res.skipped ? "skipped" : `${r.res.total} (${r.res.blank ? "Blank" : gapText(r.res)})`} ${signed(r.res.pts)}`);
+    if (r.picks.length && !r.res.skipped) lines.push(`   ${r.picks.map(p => `${p.n} ${p.g}`).join(", ")}`);
+  });
+  const share = lines.join("\n");
+  // The challenge text leaves the players out so it doesn't give the answers away.
+  const challenge = `I scored ${signed(g.points)} over ${g.n} rounds of On Target 🎯 Same targets, can you beat it? ${shareBase()}#g${g.seed}r${g.n}${g.noRepeat ? "x" : ""}s${g.points}`;
+  const vsFriend = ch && ch.score != null
+    ? (g.points > ch.score ? `You beat your friend's ${num(ch.score)}.` : g.points < ch.score ? `Your friend's ${num(ch.score)} wins this one.` : `Level with your friend on ${num(ch.score)}.`) : "";
+  view.innerHTML = `<div style="display:flex;flex-direction:column;gap:14px">
+    <section class="board"><div><div class="lab">Final score · ${g.n} rounds</div><div class="num">${num(g.points)}</div></div>
+      <div class="side"><div class="lab">${g.newBest ? "New best" : "Best"}</div><div class="tot">${num(solo.best[g.n])}</div></div></section>
+    ${vsFriend ? `<p class="round-msg">${vsFriend}</p>` : ""}
+    <section class="panel"><h2>Round by round</h2>
+      <ol class="log">${g.rounds.map((r, k) => `<li><div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap"><b>Round ${k + 1} · Target ${r.target}</b>
+        <span class="tag">${r.res.label} ${signed(r.res.pts)}</span></div>
+        <div>${r.res.skipped ? "Skipped" : `Total <b>${r.res.total}</b> (${r.res.blank ? "two players on 0" : gapText(r.res)}) · <span class="hint-line">${r.picks.map(p => esc(p.n) + " " + p.g).join(", ")}</span>`}</div></li>`).join("")}</ol>
+      <pre class="share" id="share-text">${esc(share)}</pre>
+      <div class="actions"><button class="btn primary" id="challenge">Copy challenge link</button><button class="btn" id="share">Copy breakdown</button></div>
+      <p class="hint-line" style="margin:0">The challenge link gives a friend these same ${g.n} targets and your score to beat, without showing your players.</p>
+      <div class="actions"><button class="btn go" id="again">Play again</button><button class="btn ghost" id="settings">Change rounds</button></div>
+    </section></div>`;
   $("#share").onclick = () => copy(share, $("#share-text"));
   $("#challenge").onclick = () => copy(challenge, $("#share-text"));
-  $("#next").onclick = () => soloNew();
-  $("#next").focus({ preventScroll: true });
+  $("#again").onclick = () => { solo.game = null; soloStart(); window.scrollTo({ top: 0 }); };
+  $("#settings").onclick = () => { solo.game = null; renderSoloSetup(); };
 }
 
 // ---------------------------------------------------------------- head to head
@@ -713,17 +828,27 @@ function setMode(mo) {
   mode = mo; store.set("mode", mo);
   $("#mode-solo").setAttribute("aria-pressed", mo === "solo");
   $("#mode-h2h").setAttribute("aria-pressed", mo === "h2h");
-  if (mo === "solo") { if (!solo.round) soloNew(); else renderSolo(); }
+  if (mo === "solo") renderSolo();
   else if (h2h.m) { if (h2h.m.cur && h2h.m.cur.phase === "done" && matchOver(h2h.m)) renderSummary(); else renderH2H(); }
   else renderSetup();
 }
 $("#mode-solo").onclick = () => setMode("solo");
 $("#mode-h2h").onclick = () => setMode("h2h");
+// ---------------------------------------------------------------- rules sheet
+const rulesEl = $("#rules");
+let rulesReturn = null;
+function openRules() { rulesReturn = document.activeElement; rulesEl.hidden = false; $(".sheet", rulesEl).scrollTop = 0; $("#close-rules").focus({ preventScroll: true }); }
+function closeRules() { rulesEl.hidden = true; store.set("seenRules", true); rulesReturn && rulesReturn.focus && rulesReturn.focus(); }
+$("#open-rules").onclick = $("#foot-rules").onclick = openRules;
+$("#close-rules").onclick = $("#rules-ok").onclick = closeRules;
+rulesEl.addEventListener("click", e => { if (e.target === rulesEl) closeRules(); });
+document.addEventListener("keydown", e => { if (e.key === "Escape" && !rulesEl.hidden) closeRules(); });
 if (!ALL.length) view.innerHTML = `<section class="panel"><h2>Player list missing</h2><p class="hint-line">players.js didn't load, so there's nobody to pick.</p></section>`;
 else {
   const ch = readChallenge();
-  if (ch) { mode = "solo"; soloNew(ch); setMode("solo"); }
+  if (ch) { mode = "solo"; soloStart(ch); setMode("solo"); }
   else setMode(mode);
 }
+if (!store.get("seenRules", false)) openRules();
 })();
 </script>
