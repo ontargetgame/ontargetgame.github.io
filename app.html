@@ -174,7 +174,7 @@ button:disabled { cursor: not-allowed; opacity: .45; }
     </div>
   </header>
   <main id="view"></main>
-  <p class="foot">Career Premier League goals since 1992, as of <span id="asof"></span>. Scoring: exact 30 points. 1 short 20, sliding down to 1 point at the edge of the scoring zone shown under the target. Over the target loses a point per goal over (up to 20). Outfield players on 0 goals can be picked; goalkeepers who never scored can't.</p>
+  <p class="foot">Career Premier League goals since 1992, as of <span id="asof"></span>. Scoring: exact 30 points. 1 short 20, sliding down to 1 point at the edge of the scoring zone shown under the target. Over the target loses a point per goal over (up to 20). You can use one outfield player on 0 goals; pick two and the round is a Blank (0 at best). Goalkeepers who never scored can't be picked.</p>
 </div>
 <div class="toast" id="toast" hidden></div>
 
@@ -210,7 +210,8 @@ const zone = target => Math.max(5, Math.min(Math.round(target / 3), Math.max(20,
 
 function grade(target, picks) {
   // Exact = 30. Short by 1 = 20, sliding down to 1 point at the edge of the zone.
-  // Over loses a point per goal over, capped at -20.
+  // Over loses a point per goal over, capped at -20. One player on 0 goals is
+  // free; two or more make the round a Blank, which can't score above 0.
   const total = picks.reduce((a, p) => a + p.g, 0), W = zone(target);
   let r;
   if (total > target) { const gap = total - target; r = { bust: true, gap, pts: -Math.min(gap, 20), label: "Bust", cls: "bust" }; }
@@ -224,6 +225,8 @@ function grade(target, picks) {
       : { gap, pts, label: "Missed the board", cls: "miss" };
   }
   r.zone = W; r.total = total;
+  const zeros = picks.filter(p => p.g === 0);
+  if (zeros.length >= 2) Object.assign(r, { blank: zeros, pts: Math.min(r.pts, 0), label: "Blank", cls: "bust" });
   return r;
 }
 const num = n => n < 0 ? "−" + -n : String(n);
@@ -501,7 +504,7 @@ function finishSolo(pk, again) {
     r.picks.forEach(p => solo.used.add(p.id));
     s.rounds++; s.points += r.res.pts;
     if (!r.res.bust) { s.gapSum += r.res.gap; s.gapN++; }
-    s.streak = !r.res.bust && r.res.label !== "Missed the board" && r.res.label !== "On the board" ? s.streak + 1 : 0;
+    s.streak = !r.res.bust && !r.res.blank && r.res.label !== "Missed the board" && r.res.label !== "On the board" ? s.streak + 1 : 0;
     if (s.streak > solo.best) { solo.best = s.streak; store.set("best", solo.best); }
     if (r.res.gap === 0 && !r.res.bust) { solo.bulls++; store.set("bulls", solo.bulls); }
     if (mode === "solo") renderSolo();
@@ -522,7 +525,7 @@ function finishSolo(pk, again) {
   $("#acts").innerHTML = `<button class="btn go" id="next">Next target</button>`;
   $("#res").innerHTML = `<section class="result">
     <div class="verdict"><span class="lbl ${res.cls}">${res.label}</span><span class="pts">${signed(res.pts)} pts</span></div>
-    <div class="hint-line">${res.bust ? `${res.gap} over the target = ${num(res.pts)} points` : res.gap === 0 ? "Exact hit = 30 points" : res.gap > res.zone ? `${res.gap} short. You needed to be within ${res.zone} to score` : `${res.gap} short = ${res.pts} point${res.pts === 1 ? "" : "s"}`}</div>
+    <div class="hint-line">${res.blank ? `${res.blank.map(p => esc(p.n)).join(" and ")} have never scored a Premier League goal. You can only use one player on 0, so this round is a Blank: ${num(res.pts)} points.` : res.bust ? `${res.gap} over the target = ${num(res.pts)} points` : res.gap === 0 ? "Exact hit = 30 points" : res.gap > res.zone ? `${res.gap} short. You needed to be within ${res.zone} to score` : `${res.gap} short = ${res.pts} point${res.pts === 1 ? "" : "s"}`}</div>
     ${mind ? `<div class="mind">${res.gap === 0 && !res.bust ? "Another way to hit it" : "The game had in mind"}: ${mind}</div>` : ""}
     ${vsFriend ? `<div class="round-msg">${vsFriend}</div>` : ""}
     <pre class="share" id="share-text">${esc(share)}</pre>
@@ -634,7 +637,7 @@ function renderH2H() {
     <div id="rmsg"></div></div>`;
   const showSide = i => {
     $(`#tt${i}`).textContent = tot[i];
-    $(`#tl${i}`).innerHTML = `<span class="lbl ${res[i].cls}">${res[i].label}</span> · ${gapText(res[i])}<br><b>${signed(res[i].pts)} pts</b>`;
+    $(`#tl${i}`).innerHTML = `<span class="lbl ${res[i].cls}">${res[i].label}</span> · ${res[i].blank ? "two players on 0" : gapText(res[i])}<br><b>${signed(res[i].pts)} pts</b>`;
   };
   const conclude = () => {
     let w = -1;
@@ -676,7 +679,7 @@ function summaryText(m) {
   m.rounds.forEach((r, k) => {
     lines.push(`Round ${k + 1} · Target ${r.target} · ${r.w >= 0 ? m.names[r.w] + " wins" : "level"}`);
     [0, 1].forEach(i => {
-      lines.push(`${m.names[i]}: ${r.tot[i]} (${gapText(r.res[i])}) ${signed(r.res[i].pts)} pts`);
+      lines.push(`${m.names[i]}: ${r.tot[i]} (${r.res[i].blank ? "Blank, two players on 0" : gapText(r.res[i])}) ${signed(r.res[i].pts)} pts`);
       lines.push(`   ${r.picks[i].map(p => `${p.n} ${p.g}`).join(", ")}`);
     });
     lines.push("");
