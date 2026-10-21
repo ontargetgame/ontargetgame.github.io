@@ -142,7 +142,15 @@ button:disabled { cursor: not-allowed; opacity: .45; }
 .pos { color: var(--good); } .neg { color: var(--red); } .zero { color: var(--muted); }
 .rounds { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px; }
 .rcard { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
-.rhead { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 12px; background: var(--chip); }
+.rhead { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "rt chev" "pts chev"; align-items: center; gap: 4px 8px; padding: 10px 12px; background: var(--chip); cursor: pointer; list-style: none; }
+.rhead::-webkit-details-marker { display: none; }
+.rhead .rt { grid-area: rt; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rhead .tag { background: var(--surface); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rhead .rpts { grid-area: pts; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; min-width: 0; font-size: .86rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.rhead .mini { color: var(--muted); font-weight: 600; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rhead .mini span { font-weight: 800; }
+.rhead .chev { grid-area: chev; width: 9px; height: 9px; border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted); transform: rotate(45deg); margin: 0 4px 4px; transition: transform .2s; }
+.rcard[open] .chev { transform: rotate(225deg); margin: 4px 4px 0; }
 .rhead b { font: 800 1.05rem/1 var(--display); text-transform: uppercase; letter-spacing: .02em; }
 .rhead .tgt { font-size: .82rem; color: var(--muted); }
 .prow { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 10px; padding: 10px 12px; }
@@ -193,6 +201,7 @@ button:disabled { cursor: not-allowed; opacity: .45; }
 .pts-table td { padding: 7px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
 .pts-table td:last-child { text-align: right; font-weight: 700; padding-left: 12px; }
 .rules-list { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 5px; font-size: .92rem; }
+@media (min-width: 900px) { .wrap { max-width: 640px; } }
 @media (max-width: 380px) {
   .vs { grid-template-columns: 1fr; }
 }
@@ -237,11 +246,13 @@ button:disabled { cursor: not-allowed; opacity: .45; }
     <table class="pts-table">
       <tr><td>Exact hit</td><td>30</td></tr>
       <tr><td>1 short</td><td>20</td></tr>
-      <tr><td>Further short</td><td>Drops by about 1 a goal, down to 1 point at the edge of the scoring zone</td></tr>
-      <tr><td>Outside the zone</td><td>0</td></tr>
+      <tr><td>2 short</td><td>19</td></tr>
+      <tr><td>10 short</td><td>11</td></tr>
+      <tr><td>20 short</td><td>1</td></tr>
+      <tr><td>More than 20 short</td><td>0</td></tr>
       <tr><td>Over the target</td><td>−1 per goal over, at most −20</td></tr>
     </table>
-    <p class="hint-line">The scoring zone is shown under every target. It's 20 goals for most targets, smaller for small targets and bigger for big ones.</p>
+    <p class="hint-line">So every goal you fall short costs you 1 point. That's for most targets, where you score anywhere within 20. Small targets give you less room (e.g. within 5) and big ones more, so the points drop faster or slower. The range is shown under every target.</p>
     <h3>Players on 0 goals</h3>
     <ul class="rules-list">
       <li>One player who never scored a Premier League goal is fine.</li>
@@ -313,6 +324,10 @@ const num = n => n < 0 ? "−" + -n : String(n);
 const signed = n => (n > 0 ? "+" : "") + num(n);
 const tone = n => n > 0 ? "pos" : n < 0 ? "neg" : "zero";
 // One player's line in a round card: name, total and gap, points, then their picks.
+// Collapsed round card: round, target, outcome and points on one line; tap to open the picks.
+const roundCard = (k, target, tag, pts, body) => `<li><details class="rcard"><summary class="rhead">
+  <span class="rt"><b>Round ${k + 1}</b> <span class="tgt">· Target ${target}</span></span><span class="chev" aria-hidden="true"></span>
+  <span class="rpts"><span class="tag">${tag}</span>${pts}</span></summary>${body}</details></li>`;
 const playerRow = (name, r, picks) => `<div class="prow"><span class="who">${esc(name)}</span>
   <span class="pp ${tone(r.pts)}">${signed(r.pts)}</span>
   <span class="how">${r.skipped ? "Skipped" : `${r.total} goals · ${r.blank ? "Blank, two players on 0" : r.label + ", " + gapText(r)}`}</span>
@@ -428,7 +443,7 @@ function picker(root, opts) {
   const picks = opts.picks;
   root.innerHTML = `
     <div class="search"><div class="sbox">${SEARCH_ICON}
-      <input id="${opts.id}" type="search" autocomplete="off" spellcheck="false" placeholder="Search any Premier League player" aria-label="Search players"></div>
+      <input id="${opts.id}" type="search" autocomplete="off" spellcheck="false" placeholder="Search any PL player" aria-label="Search players"></div>
       <ul class="results" role="listbox"></ul>
     </div>
     <div class="picks"></div>`;
@@ -662,9 +677,9 @@ function renderSoloSummary() {
       <div class="side"><div class="lab">${g.newBest ? "New best" : "Best"}</div><div class="tot">${num(solo.best[g.n])}</div></div></section>
     ${vsFriend ? `<p class="round-msg">${vsFriend}</p>` : ""}
     <section class="panel"><h2>Round by round</h2>
-      <ol class="rounds">${g.rounds.map((r, k) => `<li class="rcard"><div class="rhead"><span><b>Round ${k + 1}</b> <span class="tgt">· Target ${r.target}</span></span>
-        <span class="tag">${r.res.label}</span></div>
-        ${playerRow("You", r.res, r.picks)}</li>`).join("")}</ol>
+      <p class="hint-line" style="margin:0">Tap a round to see the picks.</p>
+      <ol class="rounds">${g.rounds.map((r, k) => roundCard(k, r.target, r.res.skipped ? "Skipped" : r.res.label,
+        `<span class="${tone(r.res.pts)}">${signed(r.res.pts)} pts</span>`, playerRow("You", r.res, r.picks))).join("")}</ol>
       <pre class="share" id="share-text" hidden>${esc(share)}</pre>
       <div class="actions"><button class="btn primary" id="challenge">Copy challenge link</button><button class="btn" id="share">Copy breakdown</button></div>
       <p class="hint-line" style="margin:0">The challenge link gives a friend these same ${g.n} targets and your score to beat, without showing your players.</p>
@@ -834,9 +849,10 @@ function renderSummary() {
     <section class="board"><div><div class="lab">Match won by</div><div class="num" style="font-size:clamp(2.6rem,13vw,4rem);overflow-wrap:anywhere">${esc(m.names[w])}</div></div></section>
     ${scoreHTML(m)}
     <section class="panel"><h2>Round by round</h2>
-      <ol class="rounds">${m.rounds.map((r, k) => `<li class="rcard"><div class="rhead"><span><b>Round ${k + 1}</b> <span class="tgt">· Target ${r.target}</span></span>
-        <span class="tag">${r.w >= 0 ? esc(m.names[r.w]) + " wins" : "Level"}</span></div>
-        ${[0, 1].map(i => playerRow(m.names[i], r.res[i], r.picks[i])).join("")}</li>`).join("")}</ol>
+      <p class="hint-line" style="margin:0">Tap a round to see the picks.</p>
+      <ol class="rounds">${m.rounds.map((r, k) => roundCard(k, r.target, r.w >= 0 ? esc(m.names[r.w]) + " wins" : "Level",
+        [0, 1].map(i => `<span class="mini">${esc(m.names[i])} <span class="${tone(r.res[i].pts)}">${signed(r.res[i].pts)}</span></span>`).join(""),
+        [0, 1].map(i => playerRow(m.names[i], r.res[i], r.picks[i])).join(""))).join("")}</ol>
       <pre class="share" id="share-text" hidden>${esc(text)}</pre>
       <div class="actions"><button class="btn primary" id="share">Copy summary</button><button class="btn" id="again">Rematch</button><button class="btn ghost" id="new">New players</button></div>
     </section></div>`;
