@@ -270,7 +270,8 @@ button:disabled { cursor: not-allowed; opacity: .45; }
     <h3>Ways to play</h3>
     <ul class="rules-list">
       <li><b>Solo:</b> play 3, 5 or 10 rounds for the highest total. Send a challenge link and a friend gets the same targets.</li>
-      <li><b>Head-to-head:</b> pass one phone between two players. Same target, secret picks. Best of 5 (most points) or first to 5 round wins.</li>
+      <li><b>Head-to-head on one phone:</b> pass it between two players. Same target, secret picks. Best of 5 (most points) or first to 5 round wins.</li>
+      <li><b>Head-to-head online:</b> play your rounds, then send a link. Your friend plays the same targets on their phone, sees your picks after each of their reveals, and sends the result back.</li>
       <li><b>No repeats:</b> an optional hard mode where you can't use the same player twice.</li>
     </ul>
     <button class="btn primary" id="rules-ok">Got it, let's play</button>
@@ -569,27 +570,33 @@ function soloStart(ch) {
   const seed = ch ? ch.seed : 1 + Math.floor(Math.random() * 999999999);
   solo.game = { seed, n, noRepeat, challenge: ch || null, targets: gameTargets(seed, n),
     rounds: [], used: new Set(), points: 0, over: false };
-  soloRound();
+  soloRound(solo.game);
 }
-function soloRound() {
-  const g = solo.game, T = g.targets[g.rounds.length];
+// The round engine below also runs online matches (g.online set), so it takes the game.
+function soloRound(g) {
+  const T = g.targets[g.rounds.length];
   g.rounds.push({ target: T, combo: findCombo(T, KNOWN) || findCombo(T, SCORERS), picks: [], done: false, res: null });
-  renderSolo();
+  renderSolo(g);
 }
 
-function renderSolo() {
-  const g = solo.game;
+const skippedRes = T => ({ skipped: true, pts: 0, label: "Skipped", cls: "miss", gap: T, total: 0 });
+let shown = null;  // the game on screen, so a reveal that finishes after a mode switch doesn't redraw
+function renderSolo(g = solo.game) {
+  shown = g;
   if (!g) return renderSoloSetup();
-  if (g.over) return renderSoloSummary();
+  if (g.over) return g.online ? renderOnlineEnd(g) : renderSoloSummary();
+  const on = g.online, oppPts = on && on.opp ? g.rounds.filter(r => r.done).reduce((a, r, k) => a + resOf(g.targets[k], on.opp[k]).pts, 0) : null;
   const r = g.rounds[g.rounds.length - 1], last = g.rounds.length === g.n;
   const best = solo.best[g.n];
   view.innerHTML = `
     <div style="display:flex;flex-direction:column;gap:14px">
+      ${on ? `<div class="challenge">${on.opp ? `<b>vs ${esc(on.names[0])}</b> Same targets. You see their picks after each reveal.` : "<b>Online match</b> Play your rounds, then send the link to a friend."}${g.noRepeat ? " No repeats." : ""}</div>` : ""}
       ${g.challenge ? `<div class="challenge"><b>Challenge</b> ${g.challenge.score == null ? `A friend sent you these ${g.n} targets.` : `A friend scored <b>${num(g.challenge.score)}</b> over these ${g.n} targets. Beat it.`}${g.noRepeat ? " No repeats." : ""}</div>` : ""}
       <section class="stats three" aria-label="Game so far">
         <div class="stat"><b>${g.rounds.length}/${g.n}</b><span>Round</span></div>
         <div class="stat"><b>${num(g.points)}</b><span>Points</span></div>
-        <div class="stat"><b>${best == null ? "–" : num(best)}</b><span>Best ${g.n}-round</span></div>
+        ${on ? `<div class="stat"><b>${oppPts == null ? "–" : num(oppPts)}</b><span>${on.opp ? esc(on.names[0]) : "Friend"}</span></div>`
+          : `<div class="stat"><b>${best == null ? "–" : num(best)}</b><span>Best ${g.n}-round</span></div>`}
       </section>
       ${boardHTML(r.target)}
       <div id="pick"></div>
@@ -608,8 +615,8 @@ function renderSolo() {
   }
   sync();
   skipBtn.onclick = () => {
-    r.res = { skipped: true, pts: 0, label: "Skipped", cls: "miss", gap: r.target, total: 0 }; r.done = true;
-    soloNext();
+    r.res = skippedRes(r.target); r.done = true;
+    soloNext(g);
   };
   revealBtn.onclick = async () => {
     revealBtn.disabled = true; skipBtn.disabled = true;
@@ -617,7 +624,7 @@ function renderSolo() {
     r.res = grade(r.target, r.picks); r.done = true;
     r.picks.forEach(p => g.used.add(p.id));
     g.points += r.res.pts;
-    if (mode === "solo") renderSolo();
+    if (shown === g) renderSolo(g);
   };
   if (!r.done) return;
   pk.showAll();
@@ -625,13 +632,14 @@ function renderSolo() {
   $("#tot").textContent = res.total;
   $("#gapline").textContent = gapText(res);
   const mind = r.combo ? r.combo.map(p => `<b>${esc(p.n)}</b> ${p.g}`).join(" + ") + ` = ${r.target}` : "";
-  $("#acts").innerHTML = `<button class="btn go" id="next">${last ? "See final score" : "Next round"}</button>`;
+  $("#acts").innerHTML = `<button class="btn go" id="next">${last ? (on ? "See the result" : "See final score") : "Next round"}</button>`;
   $("#res").innerHTML = `<section class="result">
     <div class="verdict"><span class="lbl ${res.cls}">${res.label}</span><span class="pts">${signed(res.pts)} pts</span></div>
     <div class="hint-line">${resultText(res)}</div>
     ${mind ? `<div class="mind">${res.gap === 0 && !res.bust ? "Another way to hit it" : "The game had in mind"}: ${mind}</div>` : ""}
-  </section>`;
-  $("#next").onclick = soloNext;
+  </section>${on && on.opp ? oppRoundHTML(g, r) : ""}`;
+  if (on && on.opp) $("#res").after($("#acts"));  // see who took the round before moving on
+  $("#next").onclick = () => soloNext(g);
   $("#next").focus({ preventScroll: true });
 }
 function resultText(res) {
@@ -641,12 +649,11 @@ function resultText(res) {
     : res.gap > res.zone ? `${res.gap} short. You needed to be within ${res.zone} to score`
     : `${res.gap} short = ${res.pts} point${res.pts === 1 ? "" : "s"}`;
 }
-function soloNext() {
-  const g = solo.game;
-  if (g.rounds.length < g.n) { soloRound(); window.scrollTo({ top: 0 }); return; }
+function soloNext(g) {
+  if (g.rounds.length < g.n) { soloRound(g); window.scrollTo({ top: 0 }); return; }
   g.over = true;
-  if (solo.best[g.n] == null || g.points > solo.best[g.n]) { g.newBest = solo.best[g.n] != null; solo.best[g.n] = g.points; store.set("bestGame", solo.best); }
-  renderSolo(); window.scrollTo({ top: 0 });
+  if (!g.online && (solo.best[g.n] == null || g.points > solo.best[g.n])) { g.newBest = solo.best[g.n] != null; solo.best[g.n] = g.points; store.set("bestGame", solo.best); }
+  renderSolo(g); window.scrollTo({ top: 0 });
 }
 
 function renderSoloSetup() {
@@ -700,12 +707,17 @@ function renderSoloSummary() {
 }
 
 // ---------------------------------------------------------------- head to head
-const h2h = { setup: store.get("h2h", { a: "", b: "", fmt: "bo5" }), m: null };
+const h2h = { setup: store.get("h2h", { a: "", b: "", fmt: "bo5" }), m: null, online: null, invite: null };
+const whereToggle = online => `<div class="seg" role="group" aria-label="Where you play">
+    <button data-where="phone" aria-pressed="${!online}">One phone</button>
+    <button data-where="online" id="where-online" aria-pressed="${online}">Online, send a link</button></div>`;
 
 function renderSetup() {
   const st = h2h.setup;
+  if (st.where === "online") return renderOnlineSetup();
   view.innerHTML = `<section class="panel">
     <h2>Head-to-head</h2>
+    ${whereToggle(false)}
     <p class="hint-line" style="margin:0">Pass one phone between you. Same target each round, picks stay secret until both have chosen. Both players score points for how close they get, and going over loses points.</p>
     <div class="two">
       <div class="field"><label for="pa">Player 1</label><input id="pa" maxlength="16" placeholder="Player 1" value="${esc(st.a)}"></div>
@@ -719,6 +731,7 @@ function renderSetup() {
       <span class="hint-line">${st.noRepeat ? "Hard: you can't pick a player you've already used this match." : "Pick anyone, any round."}</span></div>
     <button class="btn primary" id="start">Start match</button>
   </section>`;
+  view.querySelectorAll("[data-where]").forEach(b => b.onclick = () => { save(); st.where = b.dataset.where; store.set("h2h", st); renderSetup(); });
   view.querySelectorAll("[data-fmt]").forEach(b => b.onclick = () => { st.fmt = b.dataset.fmt; save(); renderSetup(); });
   view.querySelectorAll("[data-rep]").forEach(b => b.onclick = () => { st.noRepeat = b.dataset.rep === "1"; save(); renderSetup(); });
   function save() { st.a = $("#pa") ? $("#pa").value.trim() : st.a; st.b = $("#pb") ? $("#pb").value.trim() : st.b; store.set("h2h", st); }
@@ -742,15 +755,16 @@ function h2hRound() {
 
 // Best of 5: five rounds, most points wins (extra rounds if level).
 // First to 5: the player with more points in a round wins it; first to 5 rounds.
-const fmtName = m => m.fmt === "bo5" ? "5 rounds · most points wins" : "First to 5 round wins";
-const lead = m => m.fmt === "bo5" ? m.pts : m.score;
-const matchOver = m => m.fmt === "bo5" ? m.rounds.length >= 5 && m.pts[0] !== m.pts[1] : Math.max(...m.score) >= 5;
+// Online: a fixed number of rounds played in turn, most points wins, draws allowed.
+const fmtName = m => m.fmt === "online" ? `Online · ${m.rounds.length} rounds · most points` : m.fmt === "bo5" ? "5 rounds · most points wins" : "First to 5 round wins";
+const lead = m => m.fmt === "ft5" ? m.score : m.pts;
+const matchOver = m => m.fmt === "online" || (m.fmt === "bo5" ? m.rounds.length >= 5 && m.pts[0] !== m.pts[1] : Math.max(...m.score) >= 5);
 function scoreHTML(m) {
   const n = m.rounds.length + (m.cur && m.cur.phase !== "done" ? 1 : 0);
   const L = lead(m);
   const side = i => `<div class="side2 ${L[i] > L[1 - i] ? "lead" : ""}"><span class="nm">${esc(m.names[i])}</span>
-    <span class="sc ${m.fmt === "bo5" ? tone(L[i]) : ""}">${num(L[i])}</span>
-    <span class="unit">${m.fmt === "bo5" ? "points" : `rounds won · <span class="${tone(m.pts[i])}">${signed(m.pts[i])} pts</span>`}</span></div>`;
+    <span class="sc ${m.fmt !== "ft5" ? tone(L[i]) : ""}">${num(L[i])}</span>
+    <span class="unit">${m.fmt !== "ft5" ? "points" : `rounds won · <span class="${tone(m.pts[i])}">${signed(m.pts[i])} pts</span>`}</span></div>`;
   return `<section class="score">${side(0)}${side(1)}
     <span class="fmt">${fmtName(m)}${m.noRepeat ? " · No repeats" : ""} · ${m.cur && m.cur.phase === "done" && matchOver(m) ? "Final" : `Round ${n}${m.fmt === "bo5" && n <= 5 ? " of 5" : ""}`}</span></section>`;
 }
@@ -837,8 +851,9 @@ function renderH2H() {
 
 function summaryText(m) {
   const L = lead(m), w = L[0] > L[1] ? 0 : 1;
-  const lines = [`On Target 🎯 Head-to-head (${m.fmt === "bo5" ? "Best of 5" : "First to 5"})`,
-    `🏆 ${m.names[w]} beat ${m.names[1 - w]} ${num(L[w])} – ${num(L[1 - w])}${m.fmt === "bo5" ? " pts" : ""}`, ""];
+  const lines = [`On Target 🎯 Head-to-head (${m.fmt === "online" ? `online, ${m.rounds.length} rounds` : m.fmt === "bo5" ? "Best of 5" : "First to 5"})`,
+    L[0] === L[1] ? `🤝 ${m.names[0]} and ${m.names[1]} drew on ${num(L[0])} pts`
+      : `🏆 ${m.names[w]} beat ${m.names[1 - w]} ${num(L[w])} – ${num(L[1 - w])}${m.fmt !== "ft5" ? " pts" : ""}`, ""];
   m.rounds.forEach((r, k) => {
     lines.push(`Round ${k + 1} · Target ${r.target} · ${r.w >= 0 ? m.names[r.w] + " wins" : "level"}`);
     [0, 1].forEach(i => {
@@ -850,23 +865,160 @@ function summaryText(m) {
   return lines.join("\n").trim();
 }
 
-function renderSummary() {
-  const m = h2h.m, L = lead(m), w = L[0] > L[1] ? 0 : 1;
-  const text = summaryText(m);
-  view.innerHTML = `<div style="display:flex;flex-direction:column;gap:14px">
-    <section class="board"><div><div class="lab">Match won by</div><div class="num" style="font-size:clamp(2.6rem,13vw,4rem);overflow-wrap:anywhere">${esc(m.names[w])}</div></div></section>
+function summaryHTML(m, acts, note = "") {
+  const L = lead(m), w = L[0] > L[1] ? 0 : 1;
+  return `<div style="display:flex;flex-direction:column;gap:14px">
+    <section class="board"><div><div class="lab">${L[0] === L[1] ? "Match drawn" : "Match won by"}</div><div class="num" style="font-size:clamp(2.6rem,13vw,4rem);overflow-wrap:anywhere">${L[0] === L[1] ? "Level" : esc(m.names[w])}</div></div></section>
     ${scoreHTML(m)}
     <section class="panel"><h2>Round by round</h2>
       <p class="hint-line" style="margin:0">Tap a round to see the picks.</p>
       <ol class="rounds">${m.rounds.map((r, k) => roundCard(k, r.target, r.w >= 0 ? esc(m.names[r.w]) + " wins" : "Level",
         [0, 1].map(i => `<span class="mini">${esc(m.names[i])} <span class="${tone(r.res[i].pts)}">${signed(r.res[i].pts)}</span></span>`).join(""),
         [0, 1].map(i => playerRow(m.names[i], r.res[i], r.picks[i])).join(""))).join("")}</ol>
-      <pre class="share" id="share-text" hidden>${esc(text)}</pre>
-      <div class="actions"><button class="btn primary" id="share">Copy summary</button><button class="btn" id="again">Rematch</button><button class="btn ghost" id="new">New players</button></div>
+      <pre class="share" id="share-text" hidden></pre>
+      ${note}<div class="actions">${acts}</div>
     </section></div>`;
+}
+function renderSummary() {
+  const m = h2h.m, text = summaryText(m);
+  view.innerHTML = summaryHTML(m, `<button class="btn primary" id="share">Copy summary</button><button class="btn" id="again">Rematch</button><button class="btn ghost" id="new">New players</button>`);
   $("#share").onclick = () => copy(text, $("#share-text"));
   $("#again").onclick = () => { Object.assign(m, { score: [0, 0], pts: [0, 0], rounds: [], used: [new Set(), new Set()] }); h2hRound(); };
   $("#new").onclick = () => { h2h.m = null; renderSetup(); };
+}
+
+// ---------------------------------------------------------------- online head to head
+// No server: the match travels in the link. The inviter plays first and sends
+// #m<seed>.<rounds>[x].<data>; the friend plays the same targets, seeing the inviter's
+// picks after each of their own reveals, then sends a link back holding both sides.
+// The data is scrambled with the seed so the picks can't be read straight off the link.
+const b64 = {
+  enc: bytes => btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""),
+  dec: str => Uint8Array.from(atob(str.replace(/-/g, "+").replace(/_/g, "/")), c => c.charCodeAt(0)),
+};
+const scramble = (bytes, seed) => { const r = rng(seed ^ 0x5eed); return bytes.map(b => b ^ (r() * 256 | 0)); };
+const resOf = (T, picks) => picks ? grade(T, picks) : skippedRes(T);
+const packSide = rounds => rounds.map(r => r ? r.map(p => [p.n, p.g]) : 0);
+
+function matchLink(g) {
+  const on = g.online, mine = g.rounds.map(r => r.res.skipped ? null : r.picks);
+  const body = { n: on.names, t: g.targets, p: on.opp ? [packSide(on.opp), packSide(mine)] : [packSide(mine)] };
+  const data = b64.enc(scramble(new TextEncoder().encode(JSON.stringify(body)), g.seed));
+  return `${shareBase()}#m${g.seed.toString(36)}.${g.n}${g.noRepeat ? "x" : ""}.${data}`;
+}
+function readMatch() {
+  const h = location.hash.match(/^#m([0-9a-z]{1,7})\.(3|5|10)(x?)\.([A-Za-z0-9_-]{4,})$/);
+  if (!h) return null;
+  try {
+    const seed = parseInt(h[1], 36), n = +h[2];
+    const d = JSON.parse(new TextDecoder().decode(scramble(b64.dec(h[4]), seed)));
+    const names = d.n.slice(0, 2).map(x => String(x).slice(0, 16) || "Friend");
+    const targets = d.t.map(x => Math.max(1, Math.min(999, x | 0)));
+    const sides = d.p.slice(0, 2).map(side => side.map(r => Array.isArray(r) && r.length
+      ? r.slice(0, 5).map(([nm, g]) => ({ n: String(nm).slice(0, 40), g: Math.max(0, Math.min(400, g | 0)) })) : null));
+    if (targets.length !== n || !sides.length || sides.some(sd => sd.length !== n) || names.length < sides.length) return null;
+    return { seed, n, noRepeat: !!h[3], names, targets, sides };
+  } catch { return null; }
+}
+async function send(text, url) {
+  if (navigator.share) {
+    try { await navigator.share({ text, url }); return; } catch (e) { if (e.name === "AbortError") return; }
+  }
+  copy(`${text} ${url}`, $("#share-text"));
+}
+
+function onlineStart(name, n, noRepeat, inv) {
+  const seed = inv ? inv.seed : 1 + Math.floor(Math.random() * 999999999);
+  h2h.invite = null;
+  h2h.online = { seed, n, noRepeat, targets: inv ? inv.targets : gameTargets(seed, n), rounds: [], used: new Set(), points: 0, over: false,
+    online: { names: inv ? [inv.names[0], name] : [name], opp: inv ? inv.sides[0] : null } };
+  soloRound(h2h.online); window.scrollTo({ top: 0 });
+}
+function matchOf(names, sides, targets, noRepeat) {
+  const m = { names, fmt: "online", noRepeat, score: [0, 0], pts: [0, 0], rounds: [], cur: { phase: "done" } };
+  targets.forEach((T, k) => {
+    const res = [0, 1].map(i => resOf(T, sides[i][k]));
+    const w = res[0].pts > res[1].pts ? 0 : res[1].pts > res[0].pts ? 1 : -1;
+    if (w >= 0) m.score[w]++;
+    m.pts[0] += res[0].pts; m.pts[1] += res[1].pts;
+    m.rounds.push({ target: T, picks: [sides[0][k] || [], sides[1][k] || []], res, w, tot: res.map(r => r.total) });
+  });
+  return m;
+}
+// After the friend reveals a round: the inviter's picks for it and who took it.
+function oppRoundHTML(g, r) {
+  const on = g.online, k = g.rounds.indexOf(r), opp = on.opp[k], o = resOf(r.target, opp), me = r.res;
+  const msg = me.pts > o.pts ? "You take the round" : o.pts > me.pts ? `${esc(on.names[0])} takes the round` : "Dead level";
+  return `<section class="panel"><h2>${msg}</h2>
+    <div class="rcard">${playerRow(on.names[0], o, opp || [])}${playerRow("You", me, r.picks)}</div></section>`;
+}
+
+function renderOnlineSetup() {
+  const st = h2h.setup, n = st.onlineRounds || 5;
+  view.innerHTML = `<section class="panel">
+    <h2>Head-to-head</h2>
+    ${whereToggle(true)}
+    <p class="hint-line" style="margin:0">Play your rounds on your phone, then send the link. Your friend gets the same targets on theirs, and sees your picks round by round after locking in their own.</p>
+    <div class="field"><label for="me">Your name</label><input id="me" maxlength="16" placeholder="Your name" value="${esc(st.me || st.a || "")}"></div>
+    <div class="field"><span class="fl">Rounds</span>
+      <div class="seg" role="group" aria-label="Number of rounds">
+        ${[3, 5, 10].map(k => `<button data-n="${k}" aria-pressed="${n === k}">${k} rounds</button>`).join("")}</div></div>
+    <div class="field"><span class="fl">Players</span>${repeatToggle(!!st.noRepeat, "or")}
+      <span class="hint-line">${st.noRepeat ? "Hard: each player can only be used once per match." : "Pick anyone, any round."}</span></div>
+    <button class="btn primary" id="online-start">Play my rounds</button>
+  </section>`;
+  const save = () => { st.me = $("#me").value.trim(); store.set("h2h", st); };
+  $("#me").oninput = save;
+  view.querySelectorAll("[data-where]").forEach(b => b.onclick = () => { save(); st.where = b.dataset.where; store.set("h2h", st); renderSetup(); });
+  view.querySelectorAll("[data-n]").forEach(b => b.onclick = () => { save(); st.onlineRounds = +b.dataset.n; store.set("h2h", st); renderOnlineSetup(); });
+  view.querySelectorAll("[data-rep]").forEach(b => b.onclick = () => { save(); st.noRepeat = b.dataset.rep === "1"; store.set("h2h", st); renderOnlineSetup(); });
+  $("#online-start").onclick = () => { save(); onlineStart(st.me || "Player 1", n, !!st.noRepeat); };
+}
+
+// Someone opened an invite (one side) or a finished match (both sides).
+function renderInvite(inv) {
+  const st = h2h.setup, from = esc(inv.names[0]);
+  if (inv.sides.length === 2) {
+    const m = matchOf(inv.names, inv.sides, inv.targets, inv.noRepeat), text = summaryText(m);
+    view.innerHTML = summaryHTML(m, `<button class="btn primary" id="share">Copy summary</button><button class="btn" id="rematch">New online match</button>`);
+    $("#share").onclick = () => copy(text, $("#share-text"));
+    $("#rematch").onclick = () => { h2h.invite = null; st.where = "online"; store.set("h2h", st); history.replaceState(null, "", location.pathname); renderSetup(); };
+    return;
+  }
+  view.innerHTML = `<section class="panel">
+    <h2>${from} has challenged you</h2>
+    <p class="hint-line" style="margin:0">${inv.n} rounds, the same targets ${from} had${inv.noRepeat ? ", no repeats" : ""}. Pick your players for each one. After each reveal you'll see what ${from} picked and who took the round.</p>
+    <div class="field"><label for="me">Your name</label><input id="me" maxlength="16" placeholder="Your name" value="${st.me && st.me !== inv.names[0] ? esc(st.me) : ""}"></div>
+    <button class="btn primary" id="accept">Play</button>
+    <button class="btn ghost" id="decline">Not now</button>
+  </section>`;
+  $("#accept").onclick = () => { st.me = $("#me").value.trim(); store.set("h2h", st); onlineStart(st.me || "Player 2", inv.n, inv.noRepeat, inv); };
+  $("#decline").onclick = () => { h2h.invite = null; history.replaceState(null, "", location.pathname); renderSetup(); };
+}
+
+function renderOnlineEnd(g) {
+  const on = g.online, link = matchLink(g);
+  if (!on.opp) {
+    view.innerHTML = `<div style="display:flex;flex-direction:column;gap:14px">
+      <section class="board"><div><div class="lab">Your score · ${g.n} rounds</div><div class="num">${num(g.points)}</div><div class="lab">points</div></div></section>
+      <section class="panel"><h2>Now send the invite</h2>
+        <p class="hint-line" style="margin:0">Your friend plays the same ${g.n} targets. They only see your picks after locking in their own, then they can send you the result.</p>
+        <div class="actions"><button class="btn primary" id="invite">Send invite</button></div>
+        <pre class="share" id="share-text" hidden></pre></section>
+      <section class="panel"><h2>Your rounds</h2>
+        <ol class="rounds">${g.rounds.map((r, k) => roundCard(k, r.target, r.res.label,
+          `<span class="${tone(r.res.pts)}">${signed(r.res.pts)} pts</span>`, playerRow("You", r.res, r.picks))).join("")}</ol>
+        <div class="actions"><button class="btn ghost" id="new">New match</button></div></section></div>`;
+    $("#invite").onclick = () => send(`${on.names[0]} has challenged you to On Target 🎯 ${g.n} rounds, same targets. Can you beat me?`, link);
+    $("#new").onclick = () => { h2h.online = null; renderSetup(); };
+    return;
+  }
+  const m = matchOf(on.names, [on.opp, g.rounds.map(r => r.res.skipped ? null : r.picks)], g.targets, g.noRepeat);
+  const from = esc(on.names[0]);
+  view.innerHTML = summaryHTML(m, `<button class="btn primary" id="back">Send result to ${from}</button><button class="btn" id="rematch">Challenge ${from} back</button>`,
+    `<p class="hint-line" style="margin:0">${from} can't see your picks until you send the result.</p>`);
+  $("#back").onclick = () => send(`${summaryText(m).split("\n")[1]} on On Target 🎯 Every round:`, link);
+  $("#rematch").onclick = () => { history.replaceState(null, "", location.pathname); onlineStart(on.names[1], g.n, g.noRepeat); };
 }
 
 // ---------------------------------------------------------------- mode switch
@@ -877,6 +1029,8 @@ function setMode(mo) {
   $("#mode-solo").setAttribute("aria-pressed", mo === "solo");
   $("#mode-h2h").setAttribute("aria-pressed", mo === "h2h");
   if (mo === "solo") renderSolo();
+  else if (h2h.online) renderSolo(h2h.online);
+  else if (h2h.invite) renderInvite(h2h.invite);
   else if (h2h.m) { if (h2h.m.cur && h2h.m.cur.phase === "done" && matchOver(h2h.m)) renderSummary(); else renderH2H(); }
   else renderSetup();
 }
@@ -893,8 +1047,9 @@ rulesEl.addEventListener("click", e => { if (e.target === rulesEl) closeRules();
 document.addEventListener("keydown", e => { if (e.key === "Escape" && !rulesEl.hidden) closeRules(); });
 if (!ALL.length) view.innerHTML = `<section class="panel"><h2>Player list missing</h2><p class="hint-line">players.js didn't load, so there's nobody to pick.</p></section>`;
 else {
-  const ch = readChallenge();
-  if (ch) { mode = "solo"; soloStart(ch); setMode("solo"); }
+  const ch = readChallenge(), inv = readMatch();
+  if (inv) { h2h.invite = inv; setMode("h2h"); }
+  else if (ch) { mode = "solo"; soloStart(ch); setMode("solo"); }
   else setMode(mode);
 }
 if (!store.get("seenRules", false)) openRules();
