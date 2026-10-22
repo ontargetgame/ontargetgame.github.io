@@ -197,14 +197,33 @@ button:disabled { cursor: not-allowed; opacity: .45; }
 .sheet h2 { font: 900 1.8rem/1 var(--display); text-transform: uppercase; margin: 0; }
 .sheet h3 { font: 800 1.15rem/1 var(--display); text-transform: uppercase; letter-spacing: .02em; margin: 6px 0 0; }
 .sheet .close { border: 0; background: var(--chip); width: 34px; height: 34px; border-radius: 50%; font-size: 1.2rem; }
-.steps { margin: 0; padding: 0 0 0 22px; display: flex; flex-direction: column; gap: 8px; }
-.steps li::marker { font: 800 1rem var(--display); color: var(--red); }
-.example { background: var(--board); color: var(--board-ink); border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 3px; font-size: .95rem; }
-.ex-lab { font-size: .7rem; text-transform: uppercase; letter-spacing: .1em; opacity: .8; }
-.pts-table { width: 100%; border-collapse: collapse; font-size: .9rem; }
-.pts-table td { padding: 7px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
-.pts-table td:last-child { text-align: right; font-weight: 700; padding-left: 12px; }
-.rules-list { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 5px; font-size: .92rem; }
+/* how to play: swipeable cards */
+.slides { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; overscroll-behavior-x: contain; }
+.slides::-webkit-scrollbar { display: none; }
+.slide { flex: 0 0 100%; scroll-snap-align: start; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 10px; padding: 4px 6px; }
+.slide h3 { font: 900 1.7rem/1 var(--display); text-transform: uppercase; margin: 6px 0 0; }
+.slide p { margin: 0; color: var(--muted); max-width: 32ch; }
+.vis { min-height: 172px; width: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; }
+.mini-board { background: var(--board); color: var(--board-ink); border-radius: 16px; padding: 14px 36px 10px; display: flex; flex-direction: column; align-items: center; }
+.mini-board span { font-size: .7rem; letter-spacing: .12em; text-transform: uppercase; opacity: .8; }
+.mini-board b { font: 900 5.5rem/1 var(--display); }
+.mini-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 92px)); gap: 8px; justify-content: center; }
+.mc { height: 104px; border-radius: 10px; border: 2px solid var(--line); background: var(--surface); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; padding: 6px; font-size: .78rem; font-weight: 700; line-height: 1.15; }
+.mc .q { font: 900 2.2rem/1 var(--display); color: var(--muted); }
+.mc.up { background: var(--board); border-color: var(--board); color: var(--board-ink); }
+.mc.up .q { color: inherit; }
+.sum { font-weight: 600; } .sum b { font: 900 1.6rem/1 var(--display); }
+.ladder { width: 100%; max-width: 320px; display: flex; flex-direction: column; gap: 7px; font-size: .88rem; }
+.ladder div { display: grid; grid-template-columns: 64px 1fr 70px; align-items: center; gap: 8px; text-align: left; }
+.ladder i { height: 10px; border-radius: 5px; width: var(--w); background: var(--c, var(--good)); }
+.ladder b { text-align: right; font-variant-numeric: tabular-nums; }
+.modes { width: 100%; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.modes div { background: var(--chip); border-radius: 12px; padding: 10px; display: flex; flex-direction: column; gap: 3px; text-align: left; }
+.modes b { font-size: .92rem; } .modes span { font-size: .78rem; color: var(--muted); line-height: 1.25; }
+.dots { display: flex; justify-content: center; gap: 6px; }
+.dots button { width: 8px; height: 8px; border-radius: 4px; border: 0; padding: 0; background: var(--line); transition: width .2s; }
+.dots button[aria-current="true"] { width: 22px; background: var(--ink); }
+#rules-back[hidden] { display: none; }
 @media (min-width: 900px) { .wrap { max-width: 640px; } }
 @media (max-width: 380px) {
   .vs { grid-template-columns: 1fr; }
@@ -237,43 +256,47 @@ button:disabled { cursor: not-allowed; opacity: .45; }
 <div class="overlay" id="rules" hidden>
   <section class="sheet" role="dialog" aria-modal="true" aria-labelledby="rules-title">
     <div class="sheet-head"><h2 id="rules-title">How to play</h2><button class="close" id="close-rules" aria-label="Close">×</button></div>
-    <ol class="steps">
-      <li><b>You get a target number.</b> Something like 50.</li>
-      <li><b>Pick 3 to 5 Premier League players.</b> Anyone who has played since 1992. Their career Premier League goals stay hidden while you pick.</li>
-      <li><b>Press Reveal.</b> Their goals are added up. Get as close to the target as you can without going over.</li>
-    </ol>
-    <div class="example">
-      <div class="ex-lab">Example · Target 50</div>
-      <div>Darren Fletcher <b>23</b> + Harry Maguire <b>15</b> + Phil Neville <b>9</b> = <b>47</b></div>
-      <div>3 short → <b>18 points</b></div>
+    <div class="slides" id="slides" tabindex="0" aria-roledescription="carousel">
+      <section class="slide" aria-label="1 of 5">
+        <div class="vis"><div class="mini-board"><span>Target</span><b>50</b></div></div>
+        <h3>Hit the target</h3>
+        <p>Every round you get a target number.</p>
+      </section>
+      <section class="slide" aria-label="2 of 5">
+        <div class="vis"><div class="mini-cards">
+          <div class="mc"><span class="q">?</span>Darren Fletcher</div><div class="mc"><span class="q">?</span>Harry Maguire</div><div class="mc"><span class="q">?</span>Phil Neville</div></div></div>
+        <h3>Pick 3 to 5 players</h3>
+        <p>Anyone who's played in the Premier League since 1992. Their career PL goals stay hidden.</p>
+      </section>
+      <section class="slide" aria-label="3 of 5">
+        <div class="vis"><div class="mini-cards">
+          <div class="mc up"><span class="q">23</span>Fletcher</div><div class="mc up"><span class="q">15</span>Maguire</div><div class="mc up"><span class="q">9</span>P. Neville</div></div>
+          <div class="sum"><b>47</b> / 50 · 3 short · <span class="pos">+18 pts</span></div></div>
+        <h3>Reveal</h3>
+        <p>Their goals add up. Get as close as you can without going over.</p>
+      </section>
+      <section class="slide" aria-label="4 of 5">
+        <div class="vis"><div class="ladder">
+          <div><span>Exact</span><i style="--w:100%;--c:var(--gold)"></i><b>30</b></div>
+          <div><span>1 short</span><i style="--w:67%"></i><b>20</b></div>
+          <div><span>10 short</span><i style="--w:37%"></i><b>11</b></div>
+          <div><span>20 short</span><i style="--w:4%"></i><b>1</b></div>
+          <div><span>Over</span><i style="--w:67%;--c:var(--red)"></i><b class="neg">−1 a goal</b></div></div></div>
+        <h3>Closer = more points</h3>
+        <p>Each goal short costs a point. Go over and you lose points. Small targets give you less room.</p>
+      </section>
+      <section class="slide" aria-label="5 of 5">
+        <div class="vis"><div class="modes">
+          <div><b>📅 Daily</b><span>Same 5 targets for everyone</span></div>
+          <div><b>🎯 Solo</b><span>3, 5 or 10 rounds</span></div>
+          <div><b>📱 Head-to-head</b><span>2 to 6 on one phone, or online</span></div>
+          <div><b>👥 Teams</b><span>One pick each, pass it on</span></div></div></div>
+        <h3>Ways to play</h3>
+        <p>One player on 0 goals is fine. Pick two and the round is a Blank.</p>
+      </section>
     </div>
-    <h3>Scoring</h3>
-    <table class="pts-table">
-      <tr><td>Exact hit</td><td>30</td></tr>
-      <tr><td>1 short</td><td>20</td></tr>
-      <tr><td>2 short</td><td>19</td></tr>
-      <tr><td>10 short</td><td>11</td></tr>
-      <tr><td>20 short</td><td>1</td></tr>
-      <tr><td>More than 20 short</td><td>0</td></tr>
-      <tr><td>Over the target</td><td>−1 per goal over, at most −20</td></tr>
-    </table>
-    <p class="hint-line">So every goal you fall short costs you 1 point. That's for most targets, where you score anywhere within 20. Small targets give you less room (e.g. within 5) and big ones more, so the points drop faster or slower. The range is shown under every target.</p>
-    <h3>Players on 0 goals</h3>
-    <ul class="rules-list">
-      <li>One player who never scored a Premier League goal is fine.</li>
-      <li>Pick two or more and the round is a <b>Blank</b>: 0 points at best.</li>
-      <li>Goalkeepers who never scored can't be picked.</li>
-    </ul>
-    <h3>Ways to play</h3>
-    <ul class="rules-list">
-      <li><b>Daily:</b> five targets, the same for everyone today, one go, and each player can only be used once. Play every day to build a streak.</li>
-      <li><b>Solo:</b> play 3, 5 or 10 rounds for the highest total. Send a challenge link and a friend gets the same targets.</li>
-      <li><b>Head-to-head on one phone:</b> pass it between 2 to 6 players. Same target, secret picks. Best of 5 (most points) or first to 5 round wins.</li>
-      <li><b>Head-to-head online:</b> play your rounds, then send a link. Your friend plays the same targets on their phone, sees your picks after each of their reveals, and sends the result back.</li>
-      <li><b>Teams:</b> two teams of 2 to 5 on one phone. Each teammate picks one player towards the team's total. You see your teammates' names but not their goals.</li>
-      <li><b>No repeats:</b> an optional hard mode where you can't use the same player twice.</li>
-    </ul>
-    <button class="btn primary" id="rules-ok">Got it, let's play</button>
+    <div class="dots" id="dots"><button data-slide="0" aria-label="Card 1"></button><button data-slide="1" aria-label="Card 2"></button><button data-slide="2" aria-label="Card 3"></button><button data-slide="3" aria-label="Card 4"></button><button data-slide="4" aria-label="Card 5"></button></div>
+    <div class="actions"><button class="btn ghost" id="rules-back">Back</button><button class="btn primary" id="rules-next">Next</button></div>
   </section>
 </div>
 
@@ -1163,10 +1186,25 @@ $("#mode-h2h").onclick = () => setMode("h2h");
 // ---------------------------------------------------------------- rules sheet
 const rulesEl = $("#rules");
 let rulesReturn = null;
-function openRules() { rulesReturn = document.activeElement; rulesEl.hidden = false; $(".sheet", rulesEl).scrollTop = 0; $("#close-rules").focus({ preventScroll: true }); }
+// The cards swipe natively (scroll snap); dots and Back/Next follow the scroll position.
+const slidesEl = $("#slides"), nSlides = slidesEl.children.length;
+let slide = 0;
+const goSlide = (i, smooth = true) => slidesEl.scrollTo({ left: i * slidesEl.clientWidth, behavior: smooth && !reduced() ? "smooth" : "auto" });
+function syncSlide() {
+  slide = Math.round(slidesEl.scrollLeft / Math.max(1, slidesEl.clientWidth));
+  $("#dots").querySelectorAll("button").forEach((d, i) => d.setAttribute("aria-current", i === slide));
+  $("#rules-back").hidden = slide === 0;
+  $("#rules-next").textContent = slide === nSlides - 1 ? "Let's play" : "Next";
+}
+slidesEl.addEventListener("scroll", syncSlide, { passive: true });
+slidesEl.addEventListener("keydown", e => { if (e.key === "ArrowRight") goSlide(Math.min(slide + 1, nSlides - 1)); if (e.key === "ArrowLeft") goSlide(Math.max(slide - 1, 0)); });
+$("#dots").onclick = e => { const d = e.target.closest("[data-slide]"); if (d) goSlide(+d.dataset.slide); };
+$("#rules-back").onclick = () => goSlide(slide - 1);
+$("#rules-next").onclick = () => slide === nSlides - 1 ? closeRules() : goSlide(slide + 1);
+function openRules() { rulesReturn = document.activeElement; rulesEl.hidden = false; goSlide(0, false); syncSlide(); slidesEl.focus({ preventScroll: true }); }
 function closeRules() { rulesEl.hidden = true; store.set("seenRules", true); rulesReturn && rulesReturn.focus && rulesReturn.focus(); }
 $("#open-rules").onclick = $("#foot-rules").onclick = openRules;
-$("#close-rules").onclick = $("#rules-ok").onclick = closeRules;
+$("#close-rules").onclick = closeRules;
 rulesEl.addEventListener("click", e => { if (e.target === rulesEl) closeRules(); });
 document.addEventListener("keydown", e => { if (e.key === "Escape" && !rulesEl.hidden) closeRules(); });
 if (!ALL.length) view.innerHTML = `<section class="panel"><h2>Player list missing</h2><p class="hint-line">players.js didn't load, so there's nobody to pick.</p></section>`;
