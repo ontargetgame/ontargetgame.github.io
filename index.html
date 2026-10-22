@@ -274,7 +274,7 @@ button:disabled { cursor: not-allowed; opacity: .45; }
     </ul>
     <h3>Ways to play</h3>
     <ul class="rules-list">
-      <li><b>Daily:</b> five targets, the same for everyone today, one go. Play every day to build a streak.</li>
+      <li><b>Daily:</b> five targets, the same for everyone today, one go, and each player can only be used once. Play every day to build a streak.</li>
       <li><b>Solo:</b> play 3, 5 or 10 rounds for the highest total. Send a challenge link and a friend gets the same targets.</li>
       <li><b>Head-to-head on one phone:</b> pass it between 2 to 6 players. Same target, secret picks. Best of 5 (most points) or first to 5 round wins.</li>
       <li><b>Head-to-head online:</b> play your rounds, then send a link. Your friend plays the same targets on their phone, sees your picks after each of their reveals, and sends the result back.</li>
@@ -597,7 +597,7 @@ function renderSolo(g = solo.game) {
   const best = solo.best[g.n];
   view.innerHTML = `
     <div style="display:flex;flex-direction:column;gap:14px">
-      ${g.daily ? `<div class="challenge"><b>Daily #${g.daily.no}</b> Same ${g.n} targets for everyone today. One go only.</div>` : ""}
+      ${g.daily ? `<div class="challenge"><b>Daily #${g.daily.no}</b> Same ${g.n} targets for everyone today. One go, and each player can only be used once.</div>` : ""}
       ${on ? `<div class="challenge">${on.opp ? `<b>vs ${esc(on.names[0])}</b> Same targets. You see their picks after each reveal.` : "<b>Online match</b> Play your rounds, then send the link to a friend."}${g.noRepeat ? " No repeats." : ""}</div>` : ""}
       ${g.challenge ? `<div class="challenge"><b>Challenge</b> ${g.challenge.score == null ? `A friend sent you these ${g.n} targets.` : `A friend scored <b>${num(g.challenge.score)}</b> over these ${g.n} targets. Beat it.`}${g.noRepeat ? " No repeats." : ""}</div>` : ""}
       <section class="stats three" aria-label="Game so far">
@@ -1080,7 +1080,7 @@ const dailyStreak = () => daily.log.last === dayKey() || daily.log.last === yest
 
 function dailyStart() {
   const key = dayKey(), seed = 7 + dayNo(key) * 104729;
-  daily.game = { seed, n: 5, noRepeat: false, targets: gameTargets(seed, 5), rounds: [], used: new Set(), points: 0, over: false,
+  daily.game = { seed, n: 5, noRepeat: true, targets: gameTargets(seed, 5), rounds: [], used: new Set(), points: 0, over: false,
     daily: { key, no: dayNo(key) } };
   soloRound(daily.game); window.scrollTo({ top: 0 });
 }
@@ -1139,7 +1139,7 @@ function renderDaily() {
   const streak = dailyStreak();
   view.innerHTML = `<section class="panel">
     <h2>Daily #${dayNo(key)}</h2>
-    <p class="hint-line" style="margin:0">Five targets, the same for everyone today. You get one go, so make it count. Play every day to build your streak.</p>
+    <p class="hint-line" style="margin:0">Five targets, the same for everyone today. You get one go, and each player can only be used once across the five rounds. Play every day to build your streak.</p>
     <section class="stats three" aria-label="Daily stats">
       <div class="stat"><b>${streak}</b><span>Day streak</span></div>
       <div class="stat"><b>${daily.log.best}</b><span>Best streak</span></div>
