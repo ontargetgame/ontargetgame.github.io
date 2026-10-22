@@ -856,6 +856,16 @@ function renderH2H() {
     $("#quit").onclick = () => { h2h.m = null; renderSetup(); };
     return;
   }
+  // Everyone's in: hold the reveal until someone presses the button.
+  if (c.phase === "locked") {
+    view.innerHTML = `<div style="display:flex;flex-direction:column;gap:14px">${scoreHTML(m)}
+      <section class="board"><div><div class="lab">Target</div><div class="num">${c.target}</div></div></section>
+      <section class="panel handoff"><h2>${m.linked ? "Your team's locked in" : "Everyone's locked in"}</h2>
+      <p>${m.linked ? "Reveal when you're ready." : "Put the phone where everyone can see it."}</p>
+      <button class="btn primary" id="do-reveal">Reveal</button></section></div>`;
+    $("#do-reveal").onclick = () => { c.phase = "reveal"; renderH2H(); };
+    return;
+  }
   if (c.phase === "pick") {
     view.innerHTML = `<div style="display:flex;flex-direction:column;gap:14px">${scoreHTML(m)}
       ${boardHTML(c.target, `<div class="who">${turnName} picking</div>`)}
@@ -875,7 +885,7 @@ function renderH2H() {
       picks.forEach(p => m.used[who].add(p.id));
       if (m.team) { c.picks[who].push(...picks.map(p => ({ ...p, by: mateName }))); c.tmp = []; }
       c.step++;
-      c.phase = c.step < m.names.length * turns ? "ready" : "reveal";
+      c.phase = c.step < m.names.length * turns ? "ready" : "locked";
       renderH2H(); window.scrollTo({ top: 0 });
     };
     return;
