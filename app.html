@@ -278,19 +278,18 @@ small.by { color: var(--muted); font-weight: 500; font-size: .72rem; }
       <section class="slide" aria-label="3 of 5">
         <div class="vis"><div class="mini-cards">
           <div class="mc up"><span class="q">23</span>Fletcher</div><div class="mc up"><span class="q">15</span>Maguire</div><div class="mc up"><span class="q">9</span>P. Neville</div></div>
-          <div class="sum"><b>47</b> / 50 · 3 short · <span class="pos">+18 pts</span></div></div>
+          <div class="sum"><b>47</b> / 50 · 3 short · <span class="pos">+10 pts</span></div></div>
         <h3>Reveal</h3>
-        <p>Their goals add up. Get as close as you can without going over.</p>
+        <p>Their goals add up. Get as close as you can, over or under.</p>
       </section>
       <section class="slide" aria-label="4 of 5">
         <div class="vis"><div class="ladder">
-          <div><span>Exact</span><i style="--w:100%;--c:var(--gold)"></i><b>30</b></div>
-          <div><span>1 short</span><i style="--w:67%"></i><b>20</b></div>
-          <div><span>10 short</span><i style="--w:37%"></i><b>11</b></div>
-          <div><span>20 short</span><i style="--w:4%"></i><b>1</b></div>
-          <div><span>Over</span><i style="--w:67%;--c:var(--red)"></i><b class="neg">−1 a goal</b></div></div></div>
+          <div><span>Exact</span><i style="--w:100%;--c:var(--gold)"></i><b>25</b></div>
+          <div><span>Within 5</span><i style="--w:40%"></i><b>10</b></div>
+          <div><span>Within 10</span><i style="--w:20%"></i><b>5</b></div>
+          <div><span>Further</span><i style="--w:0%"></i><b>0</b></div></div></div>
         <h3>Closer = more points</h3>
-        <p>Each goal short costs a point. Go over and you lose points. Small targets give you less room.</p>
+        <p>Over or under counts the same. Nail it for 25, and you never lose points.</p>
       </section>
       <section class="slide" aria-label="5 of 5">
         <div class="vis"><div class="modes">
@@ -333,29 +332,20 @@ const store = {
 };
 
 // ---------------------------------------------------------------- rules
-// Scoring zone: how far short still scores. 20 for most targets, tighter on small
-// ones (a third of the target, at least 5) and wider on big ones (a tenth of it).
-const zone = target => Math.max(5, Math.min(Math.round(target / 3), Math.max(20, Math.round(target / 10))));
+// Scoring: exact = 25, within 5 either side = 10, within 10 = 5, further = 0.
+// Over and under count the same, so there are no minus points.
+const ZONE = 10;
 
 function grade(target, picks) {
-  // Exact = 30. Short by 1 = 20, sliding down to 1 point at the edge of the zone.
-  // Over loses a point per goal over, capped at -20. One player on 0 goals is
-  // free; two or more make the round a Blank, which can't score above 0.
-  const total = picks.reduce((a, p) => a + p.g, 0), W = zone(target);
-  let r;
-  if (total > target) { const gap = total - target; r = { bust: true, gap, pts: -Math.min(gap, 20), label: "Bust", cls: "bust" }; }
-  else {
-    const gap = target - total;
-    const pts = gap === 0 ? 30 : gap > W ? 0 : Math.round(20 - 19 * (gap - 1) / Math.max(1, W - 1));
-    r = gap === 0 ? { gap, pts, label: "Bullseye", cls: "bullseye" }
-      : gap <= Math.ceil(W / 4) ? { gap, pts, label: "Treble", cls: "treble" }
-      : gap <= Math.ceil(W * .75) ? { gap, pts, label: "Double", cls: "double" }
-      : gap <= W ? { gap, pts, label: "On the board", cls: "board" }
-      : { gap, pts, label: "Missed the board", cls: "miss" };
-  }
-  r.zone = W; r.total = total;
+  // One player on 0 goals is free; two or more make the round a Blank, worth 0.
+  const total = picks.reduce((a, p) => a + p.g, 0), gap = Math.abs(total - target);
+  const r = gap === 0 ? { pts: 25, label: "Bullseye", cls: "bullseye" }
+    : gap <= 5 ? { pts: 10, label: "Treble", cls: "treble" }
+    : gap <= ZONE ? { pts: 5, label: "Double", cls: "double" }
+    : { pts: 0, label: "Missed the board", cls: "miss" };
+  Object.assign(r, { gap, over: total > target, zone: ZONE, total });
   const zeros = picks.filter(p => p.g === 0);
-  if (zeros.length >= 2) Object.assign(r, { blank: zeros, pts: Math.min(r.pts, 0), label: "Blank", cls: "bust" });
+  if (zeros.length >= 2) Object.assign(r, { blank: zeros, pts: 0, label: "Blank", cls: "bust" });
   return r;
 }
 const num = n => n < 0 ? "−" + -n : String(n);
@@ -370,7 +360,7 @@ const playerRow = (name, r, picks) => `<div class="prow"><span class="who">${esc
   <span class="pp ${tone(r.pts)}">${signed(r.pts)}</span>
   <span class="how">${r.skipped ? "Skipped" : `${r.total} goals · ${r.blank ? "Blank, two players on 0" : r.label + ", " + gapText(r)}`}</span>
   ${picks.length && !r.skipped ? `<div class="chips">${picks.map(p => `<span>${esc(p.n)} <b>${p.g}</b>${p.by ? ` <small class="by">${esc(p.by)}</small>` : ""}</span>`).join("")}</div>` : ""}</div>`;
-const gapText = r => r.bust ? `${r.gap} over` : r.gap === 0 ? "exact" : `${r.gap} short`;
+const gapText = r => r.over ? `${r.gap} over` : r.gap === 0 ? "exact" : `${r.gap} short`;
 
 const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = Math.random() * (i + 1) | 0; [a[i], a[j]] = [a[j], a[i]]; } return a; };
 const rint = (lo, hi) => lo + Math.floor(Math.random() * (hi - lo + 1));
@@ -553,7 +543,7 @@ function picker(root, opts) {
 
 function boardHTML(target, extra = "") {
   return `<section class="board" aria-live="polite">
-    <div><div class="lab">Target</div><div class="num">${target}</div><div class="lab">Scores within ${zone(target)}</div></div>
+    <div><div class="lab">Target</div><div class="num">${target}</div><div class="lab">Scores within ${ZONE}</div></div>
     <div class="side"><div class="lab">Your total</div><div class="tot" id="tot">?</div><div class="gap" id="gapline">3 to 5 players</div></div>
     ${extra}</section>`;
 }
@@ -667,7 +657,7 @@ function renderSolo(g = solo.game) {
   $("#res").innerHTML = `<section class="result">
     <div class="verdict"><span class="lbl ${res.cls}">${res.label}</span><span class="pts">${signed(res.pts)} pts</span></div>
     <div class="hint-line">${resultText(res)}</div>
-    ${mind ? `<div class="mind">${res.gap === 0 && !res.bust ? "Another way to hit it" : "The game had in mind"}: ${mind}</div>` : ""}
+    ${mind ? `<div class="mind">${res.gap === 0 ? "Another way to hit it" : "The game had in mind"}: ${mind}</div>` : ""}
   </section>${on && on.opp ? oppRoundHTML(g, r) : ""}`;
   if (on && on.opp) $("#res").after($("#acts"));  // see who took the round before moving on
   $("#next").onclick = () => soloNext(g);
@@ -675,10 +665,9 @@ function renderSolo(g = solo.game) {
 }
 function resultText(res) {
   return res.blank ? `${res.blank.map(p => esc(p.n)).join(" and ")} have never scored a Premier League goal. You can only use one player on 0, so this round is a Blank: ${num(res.pts)} points.`
-    : res.bust ? `${res.gap} over the target = ${num(res.pts)} points`
-    : res.gap === 0 ? "Exact hit = 30 points"
-    : res.gap > res.zone ? `${res.gap} short. You needed to be within ${res.zone} to score`
-    : `${res.gap} short = ${res.pts} point${res.pts === 1 ? "" : "s"}`;
+    : res.gap === 0 ? "Exact hit = 25 points"
+    : res.gap > res.zone ? `${gapText(res)}. You needed to be within ${res.zone} to score`
+    : `${gapText(res)} = ${res.pts} points`;
 }
 function soloNext(g) {
   if (g.rounds.length < g.n) { soloRound(g); window.scrollTo({ top: 0 }); return; }
@@ -760,7 +749,7 @@ function renderSetup() {
     ${whereToggle(team ? "teams" : "phone")}
     <p class="hint-line" style="margin:0">${team
       ? `Two teams, one phone. Each round every teammate picks one player, then passes the phone on. You can see who your teammates picked but not their goals, and no conferring. The team's players add up to its total.`
-      : "Pass one phone around. Same target each round, picks stay secret until everyone has chosen. Everyone scores points for how close they get, and going over loses points."}</p>
+      : "Pass one phone around. Same target each round, picks stay secret until everyone has chosen. Everyone scores points for how close they get, over or under."}</p>
     ${team ? "" : `<div class="field"><span class="fl">Players</span>
       <div class="seg" role="group" aria-label="Number of players">
         ${[2, 3, 4, 5, 6].map(k => `<button data-count="${k}" aria-pressed="${count === k}">${k}</button>`).join("")}</div></div>`}
@@ -905,7 +894,7 @@ function renderH2H() {
     }
     if (w >= 0 && !m.linked) $(`#side${w}`).classList.add("win");
     const over = matchOver(m);
-    const msg = m.linked ? `${signed(res[0].pts)} pts. Compare with ${esc(m.linked.teams[1 - m.linked.me])}` : w >= 0 ? `${esc(m.names[w])} takes the round` : res.every(r => r.bust) ? (res.length > 2 ? "Everyone bust" : "Both bust") : "Dead level";
+    const msg = m.linked ? `${signed(res[0].pts)} pts. Compare with ${esc(m.linked.teams[1 - m.linked.me])}` : w >= 0 ? `${esc(m.names[w])} takes the round` : res.every(r => r.pts === 0) ? "Nobody scored" : "Dead level";
     const mind = c.combo ? c.combo.map(p => `<b>${esc(p.n)}</b> ${p.g}`).join(" + ") + ` = ${c.target}` : "";
     $("#rmsg").innerHTML = `<section class="result"><p class="round-msg">${msg}</p>
       ${mind ? `<div class="mind">The game had in mind: ${mind}</div>` : ""}
@@ -1295,7 +1284,7 @@ function dailyFromLog(key) {
   const rounds = d.r.map(([T, p]) => { const picks = p ? p.map(([n, g]) => ({ n, g })) : []; return { target: T, picks, res: p ? grade(T, picks) : skippedRes(T), done: true }; });
   return { n: rounds.length, rounds, points: d.pts, over: true, daily: { key, no: dayNo(key) } };
 }
-const dailyIcon = r => r.skipped ? "⬜" : r.gap === 0 && !r.bust ? "🎯" : r.pts >= 15 ? "🟩" : r.pts > 0 ? "🟨" : r.pts < 0 ? "🟥" : "⬜";
+const dailyIcon = r => r.skipped ? "⬜" : r.gap === 0 ? "🎯" : r.pts >= 10 ? "🟩" : r.pts > 0 ? "🟨" : "⬜";
 function untilTomorrow() {
   const now = new Date(), next = new Date(now); next.setHours(24, 0, 0, 0);
   const mins = Math.ceil((next - now) / 6e4);
