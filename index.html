@@ -205,6 +205,13 @@ button:disabled { cursor: not-allowed; opacity: .45; }
 .sheet h2 { font: 900 1.8rem/1 var(--display); text-transform: uppercase; margin: 0; }
 .sheet h3 { font: 800 1.15rem/1 var(--display); text-transform: uppercase; letter-spacing: .02em; margin: 6px 0 0; }
 .sheet .close { border: 0; background: var(--chip); width: 34px; height: 34px; border-radius: 50%; font-size: 1.2rem; }
+.teamf { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px 12px; margin: 0; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.teamf legend { font-size: .72rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); padding: 0 4px; }
+.mates { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 120px), 1fr)); gap: 8px; }
+.teamf input, .mates input { width: 100%; min-width: 0; font: 500 1rem var(--body); padding: 10px 12px; border: 2px solid var(--line); border-radius: 10px; background: var(--bg); color: var(--ink); }
+.teamf .tname { font-weight: 700; }
+small.by { color: var(--muted); font-weight: 500; font-size: .72rem; }
+.handoff .tag { margin: 0; }
 /* how to play: swipeable cards */
 .slides { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; overscroll-behavior-x: contain; }
 .slides::-webkit-scrollbar { display: none; }
@@ -370,7 +377,7 @@ const roundCard = (k, target, tag, pts, body) => `<li><details class="rcard"><su
 const playerRow = (name, r, picks) => `<div class="prow"><span class="who">${esc(name)}</span>
   <span class="pp ${tone(r.pts)}">${signed(r.pts)}</span>
   <span class="how">${r.skipped ? "Skipped" : `${r.total} goals · ${r.blank ? "Blank, two players on 0" : r.label + ", " + gapText(r)}`}</span>
-  ${picks.length && !r.skipped ? `<div class="chips">${picks.map(p => `<span>${esc(p.n)} <b>${p.g}</b></span>`).join("")}</div>` : ""}</div>`;
+  ${picks.length && !r.skipped ? `<div class="chips">${picks.map(p => `<span>${esc(p.n)} <b>${p.g}</b>${p.by ? ` <small class="by">${esc(p.by)}</small>` : ""}</span>`).join("")}</div>` : ""}</div>`;
 const gapText = r => r.bust ? `${r.gap} over` : r.gap === 0 ? "exact" : `${r.gap} short`;
 
 const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = Math.random() * (i + 1) | 0; [a[i], a[j]] = [a[j], a[i]]; } return a; };
@@ -749,8 +756,8 @@ const whereToggle = where => `<div class="seg" role="group" aria-label="How you 
 function renderSetup() {
   const st = h2h.setup;
   if (st.where === "online") return renderOnlineSetup();
-  // Teams: each teammate adds one player to the team's total, seeing names but not goals.
-  const team = st.where === "teams", size = st.size || 3;
+  if (st.where === "teams") return renderTeamSetup();
+  const team = false, size = 0;
   // One phone takes 2 to 6 players; teams are always two teams.
   const count = team ? 2 : st.count || 2;
   const key = team ? "teamNames" : "names";
@@ -798,7 +805,7 @@ function renderSetup() {
 
 function h2hRound() {
   const m = h2h.m;
-  const t = newTarget(m.recent);
+  const t = m.targets ? newTarget([], m.targets[m.rounds.length]) : newTarget(m.recent);
   m.recent.push(t.target);
   // Whoever picks first moves round by round.
   const N = m.names.length, first = m.rounds.length % N;
@@ -812,9 +819,10 @@ const everyone = m => m.names.map((_, i) => i);
 // Index of the single highest value, or -1 if it's shared.
 const topOf = arr => { const mx = Math.max(...arr), at = arr.flatMap((v, i) => v === mx ? [i] : []); return at.length === 1 ? at[0] : -1; };
 // Online: a fixed number of rounds played in turn, most points wins, draws allowed.
-const fmtName = m => (m.team ? `${m.team}-a-side · ` : "") + (m.fmt === "online" ? `Online · ${m.rounds.length} rounds · most points` : m.fmt === "bo5" ? "5 rounds · most points wins" : "First to 5 round wins");
+const fmtName = m => (m.team ? `${m.team}-a-side · ` : "") + (m.fmt === "online" || m.fmt === "linked" ? `${m.fmt === "online" ? "Online · " : ""}${m.rounds.length} rounds · most points`
+    : m.linked ? `5 rounds · vs ${esc(m.linked.teams[1 - m.linked.me])}` : m.fmt === "bo5" ? "5 rounds · most points wins" : "First to 5 round wins");
 const lead = m => m.fmt === "ft5" ? m.score : m.pts;
-const matchOver = m => m.fmt === "online" || (m.fmt === "bo5" ? m.rounds.length >= 5 && topOf(m.pts) >= 0 : Math.max(...m.score) >= 5);
+const matchOver = m => m.fmt === "online" || m.fmt === "linked" || (m.fixed ? m.rounds.length >= m.fixed : null) || (m.fmt === "bo5" ? m.rounds.length >= 5 && topOf(m.pts) >= 0 : Math.max(...m.score) >= 5);
 function scoreHTML(m) {
   const n = m.rounds.length + (m.cur && m.cur.phase !== "done" ? 1 : 0);
   const L = lead(m);
@@ -831,14 +839,16 @@ function renderH2H() {
   if (!m) return renderSetup();
   // Teams take one turn per teammate, each adding one player; otherwise one turn each.
   const turns = m.team || 1, who = c.order[Math.floor(c.step / turns)], member = c.step % turns + 1;
-  const turnName = m.team ? `${esc(m.names[who])} · player ${member} of ${turns}` : esc(m.names[who]);
+  const mateName = m.team ? (m.members && m.members[who] ? m.members[who][(c.step + m.rounds.length) % turns] : `Player ${member}`) : "";
+  const turnName = m.team ? `${esc(mateName)} (${esc(m.names[who])})` : esc(m.names[who]);
   if (c.phase === "ready") {
     const msg = !m.team ? (c.step === 0 ? "Pick in secret, then pass the phone." : `${esc(m.names[c.order[c.step - 1]])} has locked in. No peeking at anyone's picks.`)
-      : c.step === 0 ? "Pick one player in secret, then pass the phone to your teammate."
-      : member === 1 ? `${esc(m.names[c.order[0]])} have locked in. Now your team, one player each.`
+      : c.step === 0 ? `Pick one player, then pass the phone to your teammate. Pick ${member} of ${turns} for ${esc(m.names[who])}.`
+      : member === 1 ? `${esc(m.names[c.order[0]])} have locked in. Now ${esc(m.names[who])}, one player each.`
       : "Pick one player. You'll see who your teammates picked, but not their goals, and no conferring.";
     view.innerHTML = `<div style="display:flex;flex-direction:column;gap:14px">${scoreHTML(m)}
-      <section class="panel handoff"><h2>${turnName}${m.team ? "" : ", you're up"}</h2>
+      <section class="panel handoff"><h2>${m.team ? `${esc(mateName)}, you're up` : `${turnName}, you're up`}</h2>
+      ${m.team ? `<p class="tag">${esc(m.names[who])} · pick ${member} of ${turns}</p>` : ""}
       <p>${msg}</p>
       <button class="btn go" id="go">Show me the target</button></section>
       <button class="btn ghost" id="quit">End match</button></div>`;
@@ -849,7 +859,7 @@ function renderH2H() {
   if (c.phase === "pick") {
     view.innerHTML = `<div style="display:flex;flex-direction:column;gap:14px">${scoreHTML(m)}
       ${boardHTML(c.target, `<div class="who">${turnName} picking</div>`)}
-      ${m.team && c.picks[who].length ? `<div class="challenge"><b>Your team so far</b> ${c.picks[who].map(p => esc(p.n)).join(", ")}</div>` : ""}
+      ${m.team && c.picks[who].length ? `<div class="challenge"><b>Your team so far</b> ${c.picks[who].map(p => `${esc(p.n)}${p.by ? ` (${esc(p.by)})` : ""}`).join(", ")}</div>` : ""}
       <div id="pick"></div>
       <div class="actions"><button class="btn primary" id="lock" disabled>${m.team ? "Lock in my pick" : "Lock in picks"}</button></div></div>`;
     const picks = m.team ? (c.tmp = c.tmp || []) : c.picks[who], min = m.team ? 1 : 3;
@@ -863,7 +873,7 @@ function renderH2H() {
     sync();
     $("#lock").onclick = () => {
       picks.forEach(p => m.used[who].add(p.id));
-      if (m.team) { c.picks[who].push(...picks); c.tmp = []; }
+      if (m.team) { c.picks[who].push(...picks.map(p => ({ ...p, by: mateName }))); c.tmp = []; }
       c.step++;
       c.phase = c.step < m.names.length * turns ? "ready" : "reveal";
       renderH2H(); window.scrollTo({ top: 0 });
@@ -874,11 +884,11 @@ function renderH2H() {
   const res = c.picks.map(pk => grade(c.target, pk));
   const tot = c.picks.map(pk => pk.reduce((a, p) => a + p.g, 0));
   const side = i => `<div class="side-res" id="side${i}"><h3>${esc(m.names[i])}</h3>
-    <ol>${c.picks[i].map(p => `<li><span>${esc(p.n)}</span><span class="gv">${p.g}</span></li>`).join("")}</ol>
+    <ol>${c.picks[i].map(p => `<li><span>${esc(p.n)}${p.by ? ` <small class="by">${esc(p.by)}</small>` : ""}</span><span class="gv">${p.g}</span></li>`).join("")}</ol>
     <div class="tt" id="tt${i}">?</div><div class="tl" id="tl${i}">&nbsp;</div></div>`;
   view.innerHTML = `<div style="display:flex;flex-direction:column;gap:14px">${scoreHTML(m)}
     <section class="board"><div><div class="lab">Target</div><div class="num">${c.target}</div></div></section>
-    <div class="vs">${everyone(m).map(side).join("")}</div>
+    <div class="vs" ${m.names.length === 1 ? 'style="grid-template-columns:1fr"' : ""}>${everyone(m).map(side).join("")}</div>
     <div id="rmsg"></div></div>`;
   const showSide = i => {
     $(`#tt${i}`).textContent = tot[i];
@@ -891,14 +901,14 @@ function renderH2H() {
       res.forEach((r, i) => { m.pts[i] += r.pts; });
       m.rounds.push({ target: c.target, picks: c.picks, tot, res, w, combo: c.combo });
     }
-    if (w >= 0) $(`#side${w}`).classList.add("win");
+    if (w >= 0 && !m.linked) $(`#side${w}`).classList.add("win");
     const over = matchOver(m);
-    const msg = w >= 0 ? `${esc(m.names[w])} takes the round` : res.every(r => r.bust) ? (res.length > 2 ? "Everyone bust" : "Both bust") : "Dead level";
+    const msg = m.linked ? `${signed(res[0].pts)} pts. Compare with ${esc(m.linked.teams[1 - m.linked.me])}` : w >= 0 ? `${esc(m.names[w])} takes the round` : res.every(r => r.bust) ? (res.length > 2 ? "Everyone bust" : "Both bust") : "Dead level";
     const mind = c.combo ? c.combo.map(p => `<b>${esc(p.n)}</b> ${p.g}`).join(" + ") + ` = ${c.target}` : "";
     $("#rmsg").innerHTML = `<section class="result"><p class="round-msg">${msg}</p>
       ${mind ? `<div class="mind">The game had in mind: ${mind}</div>` : ""}
       <div class="actions"><button class="btn go" id="nr">${over ? "See the match summary" : "Next round"}</button></div></section>`;
-    $("#nr").onclick = () => { if (over) renderSummary(); else { h2hRound(); window.scrollTo({ top: 0 }); } };
+    $("#nr").onclick = () => { if (over) (m.linked ? renderLinkedEnd() : renderSummary()); else { h2hRound(); window.scrollTo({ top: 0 }); } };
     view.querySelector(".score").outerHTML = scoreHTML(m);
   };
   if (c.phase === "done") {
@@ -923,7 +933,7 @@ function summaryText(m) {
        ...everyone(m).sort((a, b) => L[b] - L[a]).map((i, k) => `${k + 1}. ${m.names[i]} ${num(L[i])}${unit}`)]
     : [w < 0 ? `🤝 ${m.names[0]} and ${m.names[1]} drew on ${num(L[0])}${unit}`
        : `🏆 ${m.names[w]} beat ${m.names[1 - w]} ${num(L[w])} – ${num(L[1 - w])}${unit}`];
-  const lines = [`On Target 🎯 Head-to-head (${m.fmt === "online" ? `online, ${m.rounds.length} rounds` : m.fmt === "bo5" ? "Best of 5" : "First to 5"})`, ...head, ""];
+  const lines = [`On Target 🎯 ${m.team ? "Teams" : "Head-to-head"} (${m.fmt === "online" || m.fmt === "linked" ? `${m.fmt === "online" ? "online, " : ""}${m.rounds.length} rounds` : m.fmt === "bo5" ? "Best of 5" : "First to 5"})`, ...head, ""];
   m.rounds.forEach((r, k) => {
     lines.push(`Round ${k + 1} · Target ${r.target} · ${r.w >= 0 ? m.names[r.w] + " wins" : "level"}`);
     everyone(m).forEach(i => {
@@ -954,6 +964,166 @@ function renderSummary() {
   view.innerHTML = summaryHTML(m, `<button class="btn primary" id="share">Copy summary</button><button class="btn" id="again">Rematch</button><button class="btn ghost" id="new">New players</button>`);
   $("#share").onclick = () => copy(text, $("#share-text"));
   $("#again").onclick = () => { Object.assign(m, { score: m.names.map(() => 0), pts: m.names.map(() => 0), rounds: [], used: m.names.map(() => new Set()) }); h2hRound(); };
+  $("#new").onclick = () => { h2h.m = null; renderSetup(); };
+}
+
+// ---------------------------------------------------------------- teams
+// Each teammate adds one player to the team's total, seeing their teammates' names
+// but not goals. On one phone both teams pass it round; with a phone per team both
+// pick at the same time and a link brings the two sides together (see linked below).
+function renderTeamSetup() {
+  const st = h2h.setup, size = st.size || 3, two = st.devices === "two";
+  st.teamNames = st.teamNames || ["", ""];
+  st.members = st.members || [[], []];
+  const block = t => `<fieldset class="teamf"><legend>${two ? (t ? "Other team" : "Your team") : `Team ${t + 1}`}</legend>
+      <input class="tname" data-t="${t}" maxlength="16" placeholder="Team ${t + 1} name" aria-label="Team ${t + 1} name" value="${esc(st.teamNames[t] || "")}">
+      ${two && t ? `<span class="hint-line">They add their own players when they open your invite.</span>` : `<div class="mates">
+      ${Array.from({ length: size }, (_, k) => `<input class="mname" data-t="${t}" data-k="${k}" maxlength="16" placeholder="Player ${k + 1}" aria-label="Team ${t + 1} player ${k + 1}" value="${esc(st.members[t][k] || "")}">`).join("")}</div>`}
+    </fieldset>`;
+  view.innerHTML = `<section class="panel">
+    <h2>Head-to-head</h2>
+    ${whereToggle("teams")}
+    <p class="hint-line" style="margin:0">Each round every teammate picks one player and passes the phone on. You can see who your teammates picked but not their goals. No conferring.</p>
+    <div class="field"><span class="fl">Phones</span>
+      <div class="seg" role="group" aria-label="Phones">
+        <button data-dev="one" aria-pressed="${!two}">One phone</button>
+        <button data-dev="two" id="dev-two" aria-pressed="${two}">One per team</button></div>
+      <span class="hint-line">${two ? "Both teams pick at the same time on their own phone, same targets. Compare screens each round, then send a link at the end for the full scoreboard." : "Both teams share one phone and pass it round."}</span></div>
+    <div class="field"><span class="fl">Players per team</span>
+      <div class="seg" role="group" aria-label="Players per team">
+        ${[2, 3, 4, 5].map(k => `<button data-size="${k}" aria-pressed="${size === k}">${k}</button>`).join("")}</div></div>
+    ${block(0)}${block(1)}
+    ${two ? `<p class="hint-line" style="margin:0">5 rounds, most points wins.</p>` : `<div class="field"><span class="fl">Match</span>
+      <div class="seg" role="group" aria-label="Match length">
+        <button data-fmt="bo5" aria-pressed="${st.fmt === "bo5"}">Best of 5</button>
+        <button data-fmt="ft5" aria-pressed="${st.fmt === "ft5"}">First to 5</button></div></div>`}
+    <div class="field"><span class="fl">Repeats</span>${repeatToggle(!!st.noRepeat, "tr")}
+      <span class="hint-line">${st.noRepeat ? "Hard: a team can't pick a player it has already used this match." : "Pick anyone, any round."}</span></div>
+    <button class="btn primary" id="start">${two ? "Next: invite the other team" : "Start match"}</button>
+  </section>`;
+  function save() {
+    view.querySelectorAll(".tname").forEach(el => { st.teamNames[+el.dataset.t] = el.value.trim(); });
+    view.querySelectorAll(".mname").forEach(el => { st.members[+el.dataset.t][+el.dataset.k] = el.value.trim(); });
+    store.set("h2h", st);
+  }
+  view.querySelectorAll("input").forEach(el => { el.oninput = save; });
+  const redo = fn => b => b.onclick = () => { save(); fn(b); store.set("h2h", st); renderSetup(); };
+  view.querySelectorAll("[data-where]").forEach(redo(b => { st.where = b.dataset.where; }));
+  view.querySelectorAll("[data-dev]").forEach(redo(b => { st.devices = b.dataset.dev; }));
+  view.querySelectorAll("[data-size]").forEach(redo(b => { st.size = +b.dataset.size; }));
+  view.querySelectorAll("[data-fmt]").forEach(redo(b => { st.fmt = b.dataset.fmt; }));
+  view.querySelectorAll("[data-rep]").forEach(redo(b => { st.noRepeat = b.dataset.rep === "1"; }));
+  const teamName = t => st.teamNames[t] || `Team ${t + 1}`;
+  const mates = t => Array.from({ length: size }, (_, k) => st.members[t][k] || `Player ${k + 1}`);
+  $("#start").onclick = () => {
+    save();
+    if (!two) {
+      const names = [teamName(0), teamName(1)];
+      h2h.m = { names, members: [mates(0), mates(1)], team: size, fmt: st.fmt, noRepeat: !!st.noRepeat,
+        used: [new Set(), new Set()], score: [0, 0], pts: [0, 0], rounds: [], recent: [], cur: null };
+      return h2hRound();
+    }
+    const seed = 1 + Math.floor(Math.random() * 999999999);
+    linkedStart({ seed, teams: [teamName(0), teamName(1)], size, noRepeat: !!st.noRepeat, targets: gameTargets(seed, 5) }, 0, mates(0));
+  };
+}
+
+// ---------------------------------------------------------------- linked (a phone per team)
+// The invite link carries the seed, team names, size and targets. Each phone plays
+// its own team through the same 5 targets. At the end a phone sends its side in a
+// link; a phone that has finished the same match merges it into the full scoreboard.
+const linkedKey = seed => "linked." + seed;
+function teamLink(L, sides) {
+  const body = { n: L.teams, z: L.size, x: L.noRepeat ? 1 : 0, t: L.targets,
+    p: sides.map(sd => sd ? sd.map(r => r.map(p => [p.n, p.g, p.by || ""])) : 0) };
+  return `${shareBase()}#t${L.seed.toString(36)}.${b64.enc(scramble(new TextEncoder().encode(JSON.stringify(body)), L.seed))}`;
+}
+function readTeamLink() {
+  const h = location.hash.match(/^#t([0-9a-z]{1,7})\.([A-Za-z0-9_-]{4,})$/);
+  if (!h) return null;
+  try {
+    const seed = parseInt(h[1], 36), d = JSON.parse(new TextDecoder().decode(scramble(b64.dec(h[2]), seed)));
+    const teams = d.n.slice(0, 2).map((x, i) => String(x).slice(0, 16) || `Team ${i + 1}`);
+    const targets = d.t.slice(0, 10).map(x => Math.max(1, Math.min(999, x | 0)));
+    const size = Math.max(2, Math.min(5, d.z | 0));
+    const sides = [0, 1].map(i => Array.isArray(d.p[i]) && d.p[i].length === targets.length
+      ? d.p[i].map(r => r.slice(0, size).map(([n, g, by]) => ({ n: String(n).slice(0, 40), g: Math.max(0, Math.min(400, g | 0)), by: String(by || "").slice(0, 16) }))) : null);
+    if (teams.length !== 2 || !targets.length) return null;
+    return { seed, teams, size, noRepeat: !!d.x, targets, sides };
+  } catch { return null; }
+}
+function linkedStart(L, me, members) {
+  h2h.teamLink = null;
+  h2h.m = { names: [L.teams[me]], members: [members], team: L.size, fmt: "bo5", noRepeat: L.noRepeat, fixed: L.targets.length,
+    targets: L.targets, linked: { ...L, me }, used: [new Set()], score: [0], pts: [0], rounds: [], recent: [], cur: null };
+  if (me === 0) return renderLinkedInvite();
+  history.replaceState(null, "", location.pathname);
+  h2hRound();
+}
+function renderLinkedInvite() {
+  const L = h2h.m.linked, link = teamLink(L, [null, null]);
+  view.innerHTML = `<section class="panel">
+    <h2>Invite ${esc(L.teams[1])}</h2>
+    <p class="hint-line" style="margin:0">Send this to someone on the other team. They open it on their phone, add their players, and you both play the same 5 targets at the same time.</p>
+    <div class="actions"><button class="btn primary" id="invite">Send invite</button></div>
+    <pre class="share" id="share-text" hidden></pre>
+    <button class="btn go" id="ready">We're ready, start</button>
+  </section>`;
+  $("#invite").onclick = () => send(`${L.teams[0]} vs ${L.teams[1]} on On Target 🎯 Open this on your team's phone:`, link);
+  $("#ready").onclick = () => h2hRound();
+}
+// Someone opened a team link: an invite (no sides yet) or a result (one or both sides).
+function renderTeamLink(T) {
+  const st = h2h.setup;
+  if (!T.sides[0] && !T.sides[1]) {
+    st.members = st.members || [[], []];
+    view.innerHTML = `<section class="panel">
+      <h2>${esc(T.teams[0])} vs ${esc(T.teams[1])}</h2>
+      <p class="hint-line" style="margin:0">You're ${esc(T.teams[1])}. ${T.size} players a side, 5 rounds${T.noRepeat ? ", no repeats" : ""}. Add your team's players, then pass this phone round your team each round.</p>
+      <div class="mates">${Array.from({ length: T.size }, (_, k) => `<input class="mname" data-k="${k}" maxlength="16" placeholder="Player ${k + 1}" aria-label="Player ${k + 1}" value="${esc(st.members[1][k] || "")}">`).join("")}</div>
+      <button class="btn primary" id="accept">Start</button>
+    </section>`;
+    $("#accept").onclick = () => {
+      const mates = [...view.querySelectorAll(".mname")].map((el, k) => el.value.trim() || `Player ${k + 1}`);
+      linkedStart({ seed: T.seed, teams: T.teams, size: T.size, noRepeat: T.noRepeat, targets: T.targets }, 1, mates);
+    };
+    return;
+  }
+  const mine = store.get(linkedKey(T.seed), null);
+  const sides = [0, 1].map(i => T.sides[i] || (mine && mine.me === i ? mine.side : null));
+  if (!sides[0] || !sides[1]) {
+    const waiting = T.teams[T.sides[0] ? 1 : 0];
+    view.innerHTML = `<section class="panel"><h2>Nearly there</h2>
+      <p class="hint-line" style="margin:0">This has ${esc(T.teams[T.sides[0] ? 0 : 1])}'s result. Open it on ${esc(waiting)}'s phone once they've finished their rounds to see the full scoreboard.</p>
+      <button class="btn ghost" id="home">Back to the game</button></section>`;
+    $("#home").onclick = () => { h2h.teamLink = null; history.replaceState(null, "", location.pathname); renderSetup(); };
+    return;
+  }
+  const m = matchOf(T.teams, sides, T.targets, T.noRepeat);
+  Object.assign(m, { fmt: "linked", team: T.size });
+  const text = summaryText(m), full = teamLink(T, sides);
+  view.innerHTML = summaryHTML(m, `<button class="btn primary" id="sendfull">Send the full result</button><button class="btn" id="share">Copy summary</button><button class="btn ghost" id="new">New match</button>`);
+  $("#sendfull").onclick = () => send(`${summaryText(m).split("\n")[1]} on On Target 🎯 Every round:`, full);
+  $("#share").onclick = () => copy(text, $("#share-text"));
+  $("#new").onclick = () => { h2h.teamLink = null; history.replaceState(null, "", location.pathname); renderSetup(); };
+}
+// A phone finished its team's rounds: keep its side, then send it to the other team.
+function renderLinkedEnd() {
+  const m = h2h.m, L = m.linked, side = m.rounds.map(r => r.picks[0]);
+  store.set(linkedKey(L.seed), { me: L.me, side: side.map(r => r.map(p => ({ n: p.n, g: p.g, by: p.by }))) });
+  const other = esc(L.teams[1 - L.me]), sides = [null, null];
+  sides[L.me] = side;
+  view.innerHTML = `<div style="display:flex;flex-direction:column;gap:14px">
+    <section class="board"><div><div class="lab">${esc(L.teams[L.me])} · 5 rounds</div><div class="num">${num(m.pts[0])}</div><div class="lab">points</div></div></section>
+    <section class="panel"><h2>Send your result</h2>
+      <p class="hint-line" style="margin:0">Send it to ${other}. When they open it after finishing their rounds, they get the full scoreboard and can send it back.</p>
+      <div class="actions"><button class="btn primary" id="sendres">Send result to ${other}</button></div>
+      <pre class="share" id="share-text" hidden></pre></section>
+    <section class="panel"><h2>Your rounds</h2>
+      <ol class="rounds">${m.rounds.map((r, k) => roundCard(k, r.target, r.res[0].label,
+        `<span class="${tone(r.res[0].pts)}">${signed(r.res[0].pts)} pts</span>`, playerRow(m.names[0], r.res[0], r.picks[0]))).join("")}</ol>
+      <div class="actions"><button class="btn ghost" id="new">New match</button></div></section></div>`;
+  $("#sendres").onclick = () => send(`${L.teams[L.me]} scored ${signed(m.pts[0])} on On Target 🎯 Open this when you've finished:`, teamLink(L, sides));
   $("#new").onclick = () => { h2h.m = null; renderSetup(); };
 }
 
@@ -1185,6 +1355,9 @@ function setMode(mo) {
   else if (mo === "solo") renderSolo();
   else if (h2h.online) renderSolo(h2h.online);
   else if (h2h.invite) renderInvite(h2h.invite);
+  else if (h2h.teamLink) renderTeamLink(h2h.teamLink);
+  else if (h2h.m && h2h.m.linked && !h2h.m.cur) renderLinkedInvite();
+  else if (h2h.m && h2h.m.linked && h2h.m.cur.phase === "done" && matchOver(h2h.m)) renderLinkedEnd();
   else if (h2h.m) { if (h2h.m.cur && h2h.m.cur.phase === "done" && matchOver(h2h.m)) renderSummary(); else renderH2H(); }
   else renderSetup();
 }
@@ -1217,12 +1390,15 @@ rulesEl.addEventListener("click", e => { if (e.target === rulesEl) closeRules();
 document.addEventListener("keydown", e => { if (e.key === "Escape" && !rulesEl.hidden) closeRules(); });
 if (!ALL.length) view.innerHTML = `<section class="panel"><h2>Player list missing</h2><p class="hint-line">players.js didn't load, so there's nobody to pick.</p></section>`;
 else {
-  const ch = readChallenge(), inv = readMatch();
-  if (inv) { h2h.invite = inv; setMode("h2h"); }
+  const ch = readChallenge(), inv = readMatch(), tl = readTeamLink();
+  if (tl) { h2h.teamLink = tl; setMode("h2h"); }
+  else if (inv) { h2h.invite = inv; setMode("h2h"); }
   else if (ch) { mode = "solo"; soloStart(ch); setMode("solo"); }
   else setMode(mode);
 }
 if (!store.get("seenRules", false)) openRules();
+// A shared link opened in this same tab only changes the hash, so load it properly.
+addEventListener("hashchange", () => { if (/^#[gmt]/.test(location.hash)) location.reload(); });
 })();
 </script>
 
