@@ -142,14 +142,15 @@ button:disabled { cursor: not-allowed; opacity: .45; }
 .field label, .field .fl { font-size: .74rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 600; }
 .field input { width: 100%; min-width: 0; font: 500 1rem var(--body); padding: 11px 12px; border: 2px solid var(--line); border-radius: 10px; background: var(--bg); color: var(--ink); }
 .two { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 140px), 1fr)); gap: 10px; }
-.score { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); background: var(--surface); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
-.score .side2 { padding: 12px 14px; display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 0; text-align: center; }
-.score .side2 + .side2 { border-left: 1px solid var(--line); }
-.score .side2.lead { background: color-mix(in srgb, var(--good) 10%, transparent); }
+/* one column per player, wrapping to rows of 2 or 3 when there are more than 3 */
+.score { --n: 2; display: flex; flex-wrap: wrap; gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+.score .side2 { flex: 1 1 calc(100% / var(--n) - 1px); background: var(--surface); padding: 12px 14px; display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 0; text-align: center; }
+.score .side2.lead { background: color-mix(in srgb, var(--good) 10%, var(--surface)); }
+.score .fmt { flex: 1 1 100%; background: var(--surface); }
 .score .nm { font-weight: 700; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .score .sc { font: 900 2.6rem/1 var(--display); font-variant-numeric: tabular-nums; }
 .score .unit { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
-.score .fmt { grid-column: 1 / -1; text-align: center; font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; border-top: 1px solid var(--line); padding: 7px 10px; }
+.score .fmt { text-align: center; font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; border-top: 1px solid var(--line); padding: 7px 10px; }
 .pos { color: var(--good); } .neg { color: var(--red); } .zero { color: var(--muted); }
 .rounds { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px; }
 .rcard { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
@@ -275,7 +276,7 @@ button:disabled { cursor: not-allowed; opacity: .45; }
     <ul class="rules-list">
       <li><b>Daily:</b> five targets, the same for everyone today, one go. Play every day to build a streak.</li>
       <li><b>Solo:</b> play 3, 5 or 10 rounds for the highest total. Send a challenge link and a friend gets the same targets.</li>
-      <li><b>Head-to-head on one phone:</b> pass it between two players. Same target, secret picks. Best of 5 (most points) or first to 5 round wins.</li>
+      <li><b>Head-to-head on one phone:</b> pass it between 2 to 6 players. Same target, secret picks. Best of 5 (most points) or first to 5 round wins.</li>
       <li><b>Head-to-head online:</b> play your rounds, then send a link. Your friend plays the same targets on their phone, sees your picks after each of their reveals, and sends the result back.</li>
       <li><b>Teams:</b> two teams of 2 to 5 on one phone. Each teammate picks one player towards the team's total. You see your teammates' names but not their goals.</li>
       <li><b>No repeats:</b> an optional hard mode where you can't use the same player twice.</li>
@@ -726,17 +727,23 @@ function renderSetup() {
   const st = h2h.setup;
   if (st.where === "online") return renderOnlineSetup();
   // Teams: each teammate adds one player to the team's total, seeing names but not goals.
-  const team = st.where === "teams", size = st.size || 3, A = team ? "ta" : "a", B = team ? "tb" : "b";
-  const lab = team ? ["Team 1", "Team 2"] : ["Player 1", "Player 2"];
+  const team = st.where === "teams", size = st.size || 3;
+  // One phone takes 2 to 6 players; teams are always two teams.
+  const count = team ? 2 : st.count || 2;
+  const key = team ? "teamNames" : "names";
+  st[key] = st[key] || (team ? [st.ta || "", st.tb || ""] : [st.a || "", st.b || ""]);
+  const lab = Array.from({ length: count }, (_, i) => `${team ? "Team" : "Player"} ${i + 1}`);
   view.innerHTML = `<section class="panel">
     <h2>Head-to-head</h2>
     ${whereToggle(team ? "teams" : "phone")}
     <p class="hint-line" style="margin:0">${team
       ? `Two teams, one phone. Each round every teammate picks one player, then passes the phone on. You can see who your teammates picked but not their goals, and no conferring. The team's players add up to its total.`
-      : "Pass one phone between you. Same target each round, picks stay secret until both have chosen. Both players score points for how close they get, and going over loses points."}</p>
+      : "Pass one phone around. Same target each round, picks stay secret until everyone has chosen. Everyone scores points for how close they get, and going over loses points."}</p>
+    ${team ? "" : `<div class="field"><span class="fl">Players</span>
+      <div class="seg" role="group" aria-label="Number of players">
+        ${[2, 3, 4, 5, 6].map(k => `<button data-count="${k}" aria-pressed="${count === k}">${k}</button>`).join("")}</div></div>`}
     <div class="two">
-      <div class="field"><label for="pa">${lab[0]}</label><input id="pa" maxlength="16" placeholder="${lab[0]}" value="${esc(st[A] || "")}"></div>
-      <div class="field"><label for="pb">${lab[1]}</label><input id="pb" maxlength="16" placeholder="${lab[1]}" value="${esc(st[B] || "")}"></div>
+      ${lab.map((l, i) => `<div class="field"><label for="pn${i}">${l}</label><input id="pn${i}" class="pname" maxlength="16" placeholder="${l}" value="${esc(st[key][i] || "")}"></div>`).join("")}
     </div>
     ${team ? `<div class="field"><span class="fl">Players per team</span>
       <div class="seg" role="group" aria-label="Players per team">
@@ -746,20 +753,22 @@ function renderSetup() {
       <div class="seg" role="group" aria-label="Match length">
         <button data-fmt="bo5" aria-pressed="${st.fmt === "bo5"}">Best of 5</button>
         <button data-fmt="ft5" aria-pressed="${st.fmt === "ft5"}">First to 5</button></div></div>
-    <div class="field"><span class="fl">Players</span>${repeatToggle(!!st.noRepeat, "hr")}
+    <div class="field"><span class="fl">Repeats</span>${repeatToggle(!!st.noRepeat, "hr")}
       <span class="hint-line">${st.noRepeat ? `Hard: ${team ? "a team" : "you"} can't pick a player ${team ? "it has" : "you've"} already used this match.` : "Pick anyone, any round."}</span></div>
     <button class="btn primary" id="start">Start match</button>
   </section>`;
   view.querySelectorAll("[data-where]").forEach(b => b.onclick = () => { save(); st.where = b.dataset.where; store.set("h2h", st); renderSetup(); });
   view.querySelectorAll("[data-fmt]").forEach(b => b.onclick = () => { st.fmt = b.dataset.fmt; save(); renderSetup(); });
   view.querySelectorAll("[data-size]").forEach(b => b.onclick = () => { st.size = +b.dataset.size; save(); renderSetup(); });
+  view.querySelectorAll("[data-count]").forEach(b => b.onclick = () => { save(); st.count = +b.dataset.count; store.set("h2h", st); renderSetup(); });
   view.querySelectorAll("[data-rep]").forEach(b => b.onclick = () => { st.noRepeat = b.dataset.rep === "1"; save(); renderSetup(); });
-  function save() { if ($("#pa")) { st[A] = $("#pa").value.trim(); st[B] = $("#pb").value.trim(); } store.set("h2h", st); }
-  $("#pa").oninput = $("#pb").oninput = save;
+  function save() { view.querySelectorAll(".pname").forEach((el, i) => { st[key][i] = el.value.trim(); }); store.set("h2h", st); }
+  view.querySelectorAll(".pname").forEach(el => { el.oninput = save; });
   $("#start").onclick = () => {
     save();
-    h2h.m = { names: [st[A] || lab[0], st[B] || lab[1]], team: team ? size : 0, fmt: st.fmt, noRepeat: !!st.noRepeat,
-      used: [new Set(), new Set()], score: [0, 0], pts: [0, 0], rounds: [], recent: [], cur: null };
+    const names = lab.map((l, i) => st[key][i] || l);
+    h2h.m = { names, team: team ? size : 0, fmt: st.fmt, noRepeat: !!st.noRepeat,
+      used: names.map(() => new Set()), score: names.map(() => 0), pts: names.map(() => 0), rounds: [], recent: [], cur: null };
     h2hRound();
   };
 }
@@ -768,24 +777,29 @@ function h2hRound() {
   const m = h2h.m;
   const t = newTarget(m.recent);
   m.recent.push(t.target);
-  const first = m.rounds.length % 2;
-  m.cur = { ...t, picks: [[], []], order: [first, 1 - first], step: 0, phase: "ready" };
+  // Whoever picks first moves round by round.
+  const N = m.names.length, first = m.rounds.length % N;
+  m.cur = { ...t, picks: m.names.map(() => []), order: everyone(m).map(i => (i + first) % N), step: 0, phase: "ready" };
   renderH2H();
 }
 
 // Best of 5: five rounds, most points wins (extra rounds if level).
 // First to 5: the player with more points in a round wins it; first to 5 rounds.
+const everyone = m => m.names.map((_, i) => i);
+// Index of the single highest value, or -1 if it's shared.
+const topOf = arr => { const mx = Math.max(...arr), at = arr.flatMap((v, i) => v === mx ? [i] : []); return at.length === 1 ? at[0] : -1; };
 // Online: a fixed number of rounds played in turn, most points wins, draws allowed.
 const fmtName = m => (m.team ? `${m.team}-a-side · ` : "") + (m.fmt === "online" ? `Online · ${m.rounds.length} rounds · most points` : m.fmt === "bo5" ? "5 rounds · most points wins" : "First to 5 round wins");
 const lead = m => m.fmt === "ft5" ? m.score : m.pts;
-const matchOver = m => m.fmt === "online" || (m.fmt === "bo5" ? m.rounds.length >= 5 && m.pts[0] !== m.pts[1] : Math.max(...m.score) >= 5);
+const matchOver = m => m.fmt === "online" || (m.fmt === "bo5" ? m.rounds.length >= 5 && topOf(m.pts) >= 0 : Math.max(...m.score) >= 5);
 function scoreHTML(m) {
   const n = m.rounds.length + (m.cur && m.cur.phase !== "done" ? 1 : 0);
   const L = lead(m);
-  const side = i => `<div class="side2 ${L[i] > L[1 - i] ? "lead" : ""}"><span class="nm">${esc(m.names[i])}</span>
+  const N = m.names.length, top = topOf(L);
+  const side = i => `<div class="side2 ${i === top ? "lead" : ""}"><span class="nm">${esc(m.names[i])}</span>
     <span class="sc ${m.fmt !== "ft5" ? tone(L[i]) : ""}">${num(L[i])}</span>
     <span class="unit">${m.fmt !== "ft5" ? "points" : `rounds won · <span class="${tone(m.pts[i])}">${signed(m.pts[i])} pts</span>`}</span></div>`;
-  return `<section class="score">${side(0)}${side(1)}
+  return `<section class="score" style="--n:${N <= 3 ? N : N === 4 ? 2 : 3}">${everyone(m).map(side).join("")}
     <span class="fmt">${fmtName(m)}${m.noRepeat ? " · No repeats" : ""} · ${m.cur && m.cur.phase === "done" && matchOver(m) ? "Final" : `Round ${n}${m.fmt === "bo5" && n <= 5 ? " of 5" : ""}`}</span></section>`;
 }
 
@@ -796,7 +810,7 @@ function renderH2H() {
   const turns = m.team || 1, who = c.order[Math.floor(c.step / turns)], member = c.step % turns + 1;
   const turnName = m.team ? `${esc(m.names[who])} · player ${member} of ${turns}` : esc(m.names[who]);
   if (c.phase === "ready") {
-    const msg = !m.team ? (c.step === 0 ? "Pick in secret, then pass the phone." : `${esc(m.names[c.order[0]])} has locked in. No peeking at their picks.`)
+    const msg = !m.team ? (c.step === 0 ? "Pick in secret, then pass the phone." : `${esc(m.names[c.order[c.step - 1]])} has locked in. No peeking at anyone's picks.`)
       : c.step === 0 ? "Pick one player in secret, then pass the phone to your teammate."
       : member === 1 ? `${esc(m.names[c.order[0]])} have locked in. Now your team, one player each.`
       : "Pick one player. You'll see who your teammates picked, but not their goals, and no conferring.";
@@ -828,36 +842,35 @@ function renderH2H() {
       picks.forEach(p => m.used[who].add(p.id));
       if (m.team) { c.picks[who].push(...picks); c.tmp = []; }
       c.step++;
-      c.phase = c.step < 2 * turns ? "ready" : "reveal";
+      c.phase = c.step < m.names.length * turns ? "ready" : "reveal";
       renderH2H(); window.scrollTo({ top: 0 });
     };
     return;
   }
   // reveal / done
-  const res = [0, 1].map(i => grade(c.target, c.picks[i]));
-  const tot = [0, 1].map(i => c.picks[i].reduce((a, p) => a + p.g, 0));
+  const res = c.picks.map(pk => grade(c.target, pk));
+  const tot = c.picks.map(pk => pk.reduce((a, p) => a + p.g, 0));
   const side = i => `<div class="side-res" id="side${i}"><h3>${esc(m.names[i])}</h3>
     <ol>${c.picks[i].map(p => `<li><span>${esc(p.n)}</span><span class="gv">${p.g}</span></li>`).join("")}</ol>
     <div class="tt" id="tt${i}">?</div><div class="tl" id="tl${i}">&nbsp;</div></div>`;
   view.innerHTML = `<div style="display:flex;flex-direction:column;gap:14px">${scoreHTML(m)}
     <section class="board"><div><div class="lab">Target</div><div class="num">${c.target}</div></div></section>
-    <div class="vs">${side(0)}${side(1)}</div>
+    <div class="vs">${everyone(m).map(side).join("")}</div>
     <div id="rmsg"></div></div>`;
   const showSide = i => {
     $(`#tt${i}`).textContent = tot[i];
     $(`#tl${i}`).innerHTML = `<span class="lbl ${res[i].cls}">${res[i].label}</span> · ${res[i].blank ? "two players on 0" : gapText(res[i])}<br><b class="${tone(res[i].pts)}">${signed(res[i].pts)} pts</b>`;
   };
   const conclude = () => {
-    let w = -1;
-    w = res[0].pts > res[1].pts ? 0 : res[1].pts > res[0].pts ? 1 : -1;
+    const w = topOf(res.map(r => r.pts));
     if (c.phase !== "done") {
       c.phase = "done"; if (w >= 0) m.score[w]++;
-      m.pts[0] += res[0].pts; m.pts[1] += res[1].pts;
+      res.forEach((r, i) => { m.pts[i] += r.pts; });
       m.rounds.push({ target: c.target, picks: c.picks, tot, res, w, combo: c.combo });
     }
     if (w >= 0) $(`#side${w}`).classList.add("win");
     const over = matchOver(m);
-    const msg = w >= 0 ? `${esc(m.names[w])} takes the round` : res[0].bust && res[1].bust ? "Both bust" : "Dead level";
+    const msg = w >= 0 ? `${esc(m.names[w])} takes the round` : res.every(r => r.bust) ? (res.length > 2 ? "Everyone bust" : "Both bust") : "Dead level";
     const mind = c.combo ? c.combo.map(p => `<b>${esc(p.n)}</b> ${p.g}`).join(" + ") + ` = ${c.target}` : "";
     $("#rmsg").innerHTML = `<section class="result"><p class="round-msg">${msg}</p>
       ${mind ? `<div class="mind">The game had in mind: ${mind}</div>` : ""}
@@ -866,14 +879,14 @@ function renderH2H() {
     view.querySelector(".score").outerHTML = scoreHTML(m);
   };
   if (c.phase === "done") {
-    view.querySelectorAll(".gv").forEach(g => g.classList.add("on")); showSide(0); showSide(1); conclude(); return;
+    view.querySelectorAll(".gv").forEach(g => g.classList.add("on")); everyone(m).forEach(showSide); conclude(); return;
   }
   const vsEl = $(".vs");
   const live = () => vsEl.isConnected;  // stop if the player switched mode mid-reveal
   (async () => {
     for (const i of c.order) {
       const gv = view.querySelectorAll(`#side${i} .gv`);
-      for (const g of gv) { await wait(550); if (!live()) return; g.classList.add("on"); }
+      for (const g of gv) { await wait(m.names.length > 2 ? 350 : 550); if (!live()) return; g.classList.add("on"); }
       await wait(300); if (!live()) return; showSide(i);
     }
     await wait(400); if (live()) conclude();
@@ -881,13 +894,16 @@ function renderH2H() {
 }
 
 function summaryText(m) {
-  const L = lead(m), w = L[0] > L[1] ? 0 : 1;
-  const lines = [`On Target 🎯 Head-to-head (${m.fmt === "online" ? `online, ${m.rounds.length} rounds` : m.fmt === "bo5" ? "Best of 5" : "First to 5"})`,
-    L[0] === L[1] ? `🤝 ${m.names[0]} and ${m.names[1]} drew on ${num(L[0])} pts`
-      : `🏆 ${m.names[w]} beat ${m.names[1 - w]} ${num(L[w])} – ${num(L[1 - w])}${m.fmt !== "ft5" ? " pts" : ""}`, ""];
+  const L = lead(m), w = topOf(L), unit = m.fmt !== "ft5" ? " pts" : "";
+  const head = m.names.length > 2
+    ? [w >= 0 ? `🏆 ${m.names[w]} wins` : "🤝 Level at the top",
+       ...everyone(m).sort((a, b) => L[b] - L[a]).map((i, k) => `${k + 1}. ${m.names[i]} ${num(L[i])}${unit}`)]
+    : [w < 0 ? `🤝 ${m.names[0]} and ${m.names[1]} drew on ${num(L[0])}${unit}`
+       : `🏆 ${m.names[w]} beat ${m.names[1 - w]} ${num(L[w])} – ${num(L[1 - w])}${unit}`];
+  const lines = [`On Target 🎯 Head-to-head (${m.fmt === "online" ? `online, ${m.rounds.length} rounds` : m.fmt === "bo5" ? "Best of 5" : "First to 5"})`, ...head, ""];
   m.rounds.forEach((r, k) => {
     lines.push(`Round ${k + 1} · Target ${r.target} · ${r.w >= 0 ? m.names[r.w] + " wins" : "level"}`);
-    [0, 1].forEach(i => {
+    everyone(m).forEach(i => {
       lines.push(`${m.names[i]}: ${r.tot[i]} (${r.res[i].blank ? "Blank, two players on 0" : gapText(r.res[i])}) ${signed(r.res[i].pts)} pts`);
       lines.push(`   ${r.picks[i].map(p => `${p.n} ${p.g}`).join(", ")}`);
     });
@@ -897,15 +913,15 @@ function summaryText(m) {
 }
 
 function summaryHTML(m, acts, note = "") {
-  const L = lead(m), w = L[0] > L[1] ? 0 : 1;
+  const w = topOf(lead(m));
   return `<div style="display:flex;flex-direction:column;gap:14px">
-    <section class="board"><div><div class="lab">${L[0] === L[1] ? "Match drawn" : "Match won by"}</div><div class="num" style="font-size:clamp(2.6rem,13vw,4rem);overflow-wrap:anywhere">${L[0] === L[1] ? "Level" : esc(m.names[w])}</div></div></section>
+    <section class="board"><div><div class="lab">${w < 0 ? "Match drawn" : "Match won by"}</div><div class="num" style="font-size:clamp(2.6rem,13vw,4rem);overflow-wrap:anywhere">${w < 0 ? "Level" : esc(m.names[w])}</div></div></section>
     ${scoreHTML(m)}
     <section class="panel"><h2>Round by round</h2>
       <p class="hint-line" style="margin:0">Tap a round to see the picks.</p>
       <ol class="rounds">${m.rounds.map((r, k) => roundCard(k, r.target, r.w >= 0 ? esc(m.names[r.w]) + " wins" : "Level",
-        [0, 1].map(i => `<span class="mini">${esc(m.names[i])} <span class="${tone(r.res[i].pts)}">${signed(r.res[i].pts)}</span></span>`).join(""),
-        [0, 1].map(i => playerRow(m.names[i], r.res[i], r.picks[i])).join(""))).join("")}</ol>
+        everyone(m).map(i => `<span class="mini">${esc(m.names[i])} <span class="${tone(r.res[i].pts)}">${signed(r.res[i].pts)}</span></span>`).join(""),
+        everyone(m).map(i => playerRow(m.names[i], r.res[i], r.picks[i])).join(""))).join("")}</ol>
       <pre class="share" id="share-text" hidden></pre>
       ${note}<div class="actions">${acts}</div>
     </section></div>`;
@@ -914,7 +930,7 @@ function renderSummary() {
   const m = h2h.m, text = summaryText(m);
   view.innerHTML = summaryHTML(m, `<button class="btn primary" id="share">Copy summary</button><button class="btn" id="again">Rematch</button><button class="btn ghost" id="new">New players</button>`);
   $("#share").onclick = () => copy(text, $("#share-text"));
-  $("#again").onclick = () => { Object.assign(m, { score: [0, 0], pts: [0, 0], rounds: [], used: [new Set(), new Set()] }); h2hRound(); };
+  $("#again").onclick = () => { Object.assign(m, { score: m.names.map(() => 0), pts: m.names.map(() => 0), rounds: [], used: m.names.map(() => new Set()) }); h2hRound(); };
   $("#new").onclick = () => { h2h.m = null; renderSetup(); };
 }
 
@@ -969,7 +985,7 @@ function matchOf(names, sides, targets, noRepeat) {
   const m = { names, fmt: "online", noRepeat, score: [0, 0], pts: [0, 0], rounds: [], cur: { phase: "done" } };
   targets.forEach((T, k) => {
     const res = [0, 1].map(i => resOf(T, sides[i][k]));
-    const w = res[0].pts > res[1].pts ? 0 : res[1].pts > res[0].pts ? 1 : -1;
+    const w = topOf(res.map(r => r.pts));
     if (w >= 0) m.score[w]++;
     m.pts[0] += res[0].pts; m.pts[1] += res[1].pts;
     m.rounds.push({ target: T, picks: [sides[0][k] || [], sides[1][k] || []], res, w, tot: res.map(r => r.total) });
