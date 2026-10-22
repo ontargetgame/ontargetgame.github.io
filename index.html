@@ -59,6 +59,9 @@ button:disabled { cursor: not-allowed; opacity: .45; }
 .logo svg { width: 30px; height: 30px; flex: none; }
 .seg { display: inline-flex; background: var(--chip); border-radius: 999px; padding: 3px; gap: 2px; }
 .seg button { border: 0; background: none; padding: 6px 12px; border-radius: 999px; font-weight: 600; font-size: .88rem; color: var(--muted); }
+/* toggles fill their row with equal-width buttons */
+.panel .seg { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); width: 100%; }
+.panel .seg button { text-align: center; line-height: 1.2; }
 .seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgb(0 0 0 / .12); }
 .bar { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
 
@@ -710,7 +713,7 @@ function renderSoloSummary() {
 const h2h = { setup: store.get("h2h", { a: "", b: "", fmt: "bo5" }), m: null, online: null, invite: null };
 const whereToggle = online => `<div class="seg" role="group" aria-label="Where you play">
     <button data-where="phone" aria-pressed="${!online}">One phone</button>
-    <button data-where="online" id="where-online" aria-pressed="${online}">Online, send a link</button></div>`;
+    <button data-where="online" id="where-online" aria-pressed="${online}">Online</button></div>`;
 
 function renderSetup() {
   const st = h2h.setup;
@@ -725,8 +728,8 @@ function renderSetup() {
     </div>
     <div class="field"><span class="fl">Match</span>
       <div class="seg" role="group" aria-label="Match length">
-        <button data-fmt="bo5" aria-pressed="${st.fmt === "bo5"}">Best of 5 (points)</button>
-        <button data-fmt="ft5" aria-pressed="${st.fmt === "ft5"}">First to 5 wins</button></div></div>
+        <button data-fmt="bo5" aria-pressed="${st.fmt === "bo5"}">Best of 5</button>
+        <button data-fmt="ft5" aria-pressed="${st.fmt === "ft5"}">First to 5</button></div></div>
     <div class="field"><span class="fl">Players</span>${repeatToggle(!!st.noRepeat, "hr")}
       <span class="hint-line">${st.noRepeat ? "Hard: you can't pick a player you've already used this match." : "Pick anyone, any round."}</span></div>
     <button class="btn primary" id="start">Start match</button>
