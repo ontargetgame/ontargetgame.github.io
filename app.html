@@ -184,7 +184,9 @@ button:disabled { cursor: not-allowed; opacity: .45; }
 .tag { display: inline-block; font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; padding: 2px 7px; border-radius: 999px; background: var(--chip); }
 .foot { font-size: .75rem; color: var(--muted); text-align: center; margin: 6px 0 0; }
 
-.topr { display: flex; align-items: center; gap: 8px; }
+.modes-bar { flex: 1 1 100%; display: flex; }
+.modes-bar button { flex: 1 1 auto; white-space: nowrap; padding-inline: 8px; }
+@media (max-width: 380px) { .modes-bar button { padding-inline: 4px; font-size: .8rem; } }
 .help { width: 34px; height: 34px; border-radius: 50%; border: 1.5px solid var(--line); background: var(--surface); font: 800 1rem/1 var(--display); flex: none; }
 .linkish { border: 0; background: none; padding: 0; color: var(--ink); text-decoration: underline; font: inherit; }
 .overlay { position: fixed; inset: 0; z-index: 30; background: rgb(0 0 0 / .45); display: flex; align-items: flex-end; justify-content: center;
@@ -231,6 +233,28 @@ small.by { color: var(--muted); font-weight: 500; font-size: .72rem; }
 .dots button { width: 8px; height: 8px; border-radius: 4px; border: 0; padding: 0; background: var(--line); transition: width .2s; }
 .dots button[aria-current="true"] { width: 22px; background: var(--ink); }
 #rules-back[hidden] { display: none; }
+/* higher or lower */
+.hl { display: flex; flex-direction: column; gap: 10px; }
+.hlc { border-radius: 16px; padding: 16px 18px; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 4px 14px; min-height: 118px; }
+.hlc.known { background: var(--board); color: var(--board-ink); }
+.hlc.ask { background: var(--surface); border: 2px solid var(--line); }
+.hlc.ask.right { border-color: var(--good); } .hlc.ask.wrong { border-color: var(--red); }
+.hlc .hn { font: 900 clamp(1.6rem, 7.5vw, 2.2rem)/1 var(--display); text-transform: uppercase; overflow-wrap: anywhere; }
+.hlc .hm { font-size: .8rem; opacity: .8; margin-top: 4px; }
+.hlc .hv { text-align: right; }
+.hlc .hv b { display: block; font: 900 clamp(2.8rem, 14vw, 3.8rem)/.9 var(--display); font-variant-numeric: tabular-nums; }
+.hlc .hv span { font-size: .66rem; text-transform: uppercase; letter-spacing: .1em; opacity: .75; }
+.hlc.ask .hv b { color: var(--muted); }
+.hlc.ask.right .hv b { color: var(--good); } .hlc.ask.wrong .hv b { color: var(--red); }
+.hlq { text-align: center; font-weight: 600; margin: 0; }
+.hlvs { align-self: center; font: 900 1rem/1 var(--display); color: var(--muted); letter-spacing: .1em; margin: -4px 0; }
+.hlbtns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.hlbtns .btn { font-size: 1.1rem; padding: 16px 10px; }
+.hlbtns .up { background: var(--board); color: var(--board-ink); }
+.hlbtns .down { background: var(--red); color: #fff; }
+.hl-msg { text-align: center; font: 800 1.3rem/1.1 var(--display); text-transform: uppercase; margin: 0; min-height: 1.3em; }
+.hl-msg.pos { color: var(--good); } .hl-msg.neg { color: var(--red); }
+.trail { font-size: 1.1rem; letter-spacing: .1em; text-align: center; overflow-wrap: anywhere; margin: 0; }
 @media (min-width: 900px) { .wrap { max-width: 640px; } }
 @media (max-width: 380px) {
   .vs { grid-template-columns: 1fr; }
@@ -246,17 +270,16 @@ small.by { color: var(--muted); font-weight: 500; font-size: .72rem; }
       <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="15" fill="var(--board)"/><circle cx="16" cy="16" r="10.5" fill="var(--bg)"/><circle cx="16" cy="16" r="6" fill="var(--red)"/><circle cx="16" cy="16" r="2.2" fill="var(--bg)"/></svg>
       On Target
     </h1>
-    <div class="topr">
-      <div class="seg" role="group" aria-label="Game mode">
+    <button class="help" id="open-rules" aria-label="How to play" title="How to play">?</button>
+    <div class="seg modes-bar" role="group" aria-label="Game mode">
         <button id="mode-daily" aria-pressed="false">Daily</button>
         <button id="mode-solo" aria-pressed="true">Solo</button>
         <button id="mode-h2h" aria-pressed="false">Head-to-head</button>
-      </div>
-      <button class="help" id="open-rules" aria-label="How to play" title="How to play">?</button>
+        <button id="mode-hl" aria-pressed="false">Higher/Lower</button>
     </div>
   </header>
   <main id="view"></main>
-  <p class="foot">Career Premier League goals since 1992, as of <span id="asof"></span>. <button class="linkish" id="foot-rules">How to play and scoring</button></p>
+  <p class="foot">Career Premier League <span id="foot-stat">goals</span> since 1992, as of <span id="asof"></span>. <button class="linkish" id="foot-rules">How to play and scoring</button></p>
 </div>
 <div class="toast" id="toast" hidden></div>
 
@@ -297,7 +320,8 @@ small.by { color: var(--muted); font-weight: 500; font-size: .72rem; }
           <div><b>📅 Daily</b><span>Same 5 targets for everyone</span></div>
           <div><b>🎯 Solo</b><span>3, 5 or 10 rounds</span></div>
           <div><b>📱 Head-to-head</b><span>2 to 6 on one phone, or online</span></div>
-          <div><b>👥 Teams</b><span>One pick each, pass it on</span></div></div></div>
+          <div><b>👥 Teams</b><span>One pick each, pass it on</span></div>
+          <div><b>↕️ Higher or lower</b><span>Who has more PL appearances?</span></div></div></div>
         <h3>Ways to play</h3>
         <p>One player on 0 goals is fine. Pick two and the round is a Blank.</p>
       </section>
@@ -1345,6 +1369,154 @@ function renderDaily() {
   $("#daily-start").onclick = dailyStart;
 }
 
+// ---------------------------------------------------------------- higher or lower
+// You see one player's career PL appearances and say whether the next player has
+// more or fewer. One wrong answer ends the run; the score is your streak.
+// Each round is a fresh pair, picked so that:
+//  - only players with 100+ apps come up (below that almost nobody can know),
+//    and better-known players come up more often, especially early in a run;
+//  - nobody repeats within a run, and players you saw in recent runs (kept on
+//    this phone) are much less likely, so it doesn't keep showing Milner;
+//  - difficulty is mixed every round (easy = one has 1.8x the other or more,
+//    medium = 1.35x to 1.8x, hard = within 1.35x), leaning harder as the streak grows;
+//  - "higher" and "lower" are each the answer half the time.
+// The difficulty is only shown after you answer, because "easy" would give it away.
+const HL_POOL = ALL.filter(p => p.a >= 100);
+const hlFame = p => p.a >= 300 || p.g >= 60 ? 1 : p.a >= 200 || p.g >= 25 ? .55 : .25;
+const HL_LEVELS = [
+  { key: "easy", dot: "🟢", lo: 1.8, hi: Infinity },
+  { key: "medium", dot: "🟡", lo: 1.35, hi: 1.8 },
+  { key: "hard", dot: "🔴", lo: 1.06, hi: 1.35 },
+];
+const hlMix = s => s < 3 ? [.7, .25, .05] : s < 8 ? [.4, .4, .2] : s < 15 ? [.25, .4, .35] : [.15, .4, .45];
+const hl = { best: store.get("hlBest", 0), seen: store.get("hlSeen", []), run: null };
+function hlPickWeighted(list, w) {
+  let tot = 0; const ws = list.map(p => (tot += w(p)));
+  const x = Math.random() * tot;
+  return list[ws.findIndex(c => c > x)] || list[list.length - 1];
+}
+function hlPair(run) {
+  const recent = new Set(hl.seen), s = run.streak;
+  const weight = p => (s < 3 ? hlFame(p) ** 2 : hlFame(p)) * (recent.has(p.n) ? .06 : 1);
+  const mix = hlMix(s);
+  let x = Math.random(), lv = 0;
+  while (lv < 2 && (x -= mix[lv]) >= 0) lv++;
+  const fresh = HL_POOL.filter(p => !run.used.has(p.id));
+  for (let tries = 0; tries < 60; tries++) {
+    const L = HL_LEVELS[tries < 40 ? lv : (lv + 1 + (tries % 2)) % 3];
+    const up = Math.random() < .5;
+    const a = hlPickWeighted(fresh, weight);
+    const cands = fresh.filter(b => {
+      if (b === a || b.a === a.a || (up ? b.a < a.a : b.a > a.a)) return false;
+      const r = Math.max(a.a, b.a) / Math.min(a.a, b.a);
+      return r >= L.lo && r < L.hi && Math.abs(a.a - b.a) >= 6;
+    });
+    if (!cands.length) continue;
+    const b = hlPickWeighted(cands, weight);
+    return { a, b, level: L };
+  }
+  // fallback: any two different counts
+  const [a, b] = fresh.sort(() => Math.random() - .5).filter((p, i, arr) => i === 0 || p.a !== arr[0].a);
+  const r = Math.max(a.a, b.a) / Math.min(a.a, b.a);
+  return { a, b, level: HL_LEVELS.find(L => r >= L.lo) || HL_LEVELS[2] };
+}
+function hlRemember(ps) {
+  ps.forEach(p => { const i = hl.seen.indexOf(p.n); if (i >= 0) hl.seen.splice(i, 1); hl.seen.push(p.n); });
+  hl.seen = hl.seen.slice(-250);
+  store.set("hlSeen", hl.seen);
+}
+function hlStart() {
+  hl.run = { streak: 0, used: new Set(), trail: [], pair: null, answered: null, over: false };
+  hlNext();
+}
+function hlNext() {
+  const run = hl.run;
+  run.pair = hlPair(run); run.answered = null;
+  run.used.add(run.pair.a.id); run.used.add(run.pair.b.id);
+  hlRemember([run.pair.a, run.pair.b]);
+  renderHL();
+}
+const hlCard = (p, cls, val) => `<section class="hlc ${cls}">
+    <div><div class="hn">${esc(p.n)}</div><div class="hm">${esc(meta(p)) || "&nbsp;"}</div></div>
+    <div class="hv"><b${cls === "known" ? "" : ' id="hl-b"'}>${val}</b><span>PL apps</span></div></section>`;
+function hlShareText(run) {
+  return [`On Target · Higher or lower ↕️ Streak: ${run.streak}${run.streak >= 10 ? " 🔥" : ""}`,
+    run.trail.map(L => L.dot).join("") + "❌"].join("\n");
+}
+function renderHL() {
+  const run = hl.run;
+  if (!run) {
+    view.innerHTML = `<section class="panel">
+      <h2>Higher or lower</h2>
+      <p class="hint-line" style="margin:0">You get one player's Premier League appearances. Has the next player made more or fewer? Keep going until you get one wrong. Your score is your streak.</p>
+      <p class="hint-line" style="margin:0">Everyone here has played 100+ PL games. It starts easier and gets closer as your streak grows.</p>
+      <section class="stats three" aria-label="Your record">
+        <div class="stat"><b>${hl.best}</b><span>Best streak</span></div>
+        <div class="stat"><b>${HL_POOL.length.toLocaleString()}</b><span>Players</span></div>
+        <div class="stat"><b>3</b><span>Levels</span></div></section>
+      <button class="btn primary" id="hl-start">Play</button>
+    </section>`;
+    $("#hl-start").onclick = hlStart;
+    return;
+  }
+  const { a, b, level } = run.pair, ans = run.answered;
+  const right = ans && ans.right;
+  view.innerHTML = `<div class="hl">
+    <section class="stats three" aria-label="Your run">
+      <div class="stat"><b>${run.streak}</b><span>Streak</span></div>
+      <div class="stat"><b>${Math.max(hl.best, run.streak)}</b><span>Best</span></div>
+      <div class="stat"><b>${ans ? level.key[0].toUpperCase() + level.key.slice(1) : "?"}</b><span>This pair</span></div></section>
+    ${hlCard(a, "known", a.a)}
+    <span class="hlvs">VS</span>
+    ${hlCard(b, `ask${ans ? (right ? " right" : " wrong") : ""}`, "?")}
+    ${ans ? `<p class="hl-msg ${right ? "pos" : "neg"}" aria-live="polite" id="hl-msg">&nbsp;</p>`
+      : `<p class="hlq">Has <b>${esc(b.n)}</b> made more or fewer PL appearances than ${esc(a.n)}?</p>
+    <div class="hlbtns"><button class="btn up" id="hl-up">▲ Higher</button><button class="btn down" id="hl-down">▼ Lower</button></div>`}
+    <div id="hl-end"></div>
+  </div>`;
+  if (!ans) {
+    $("#hl-up").onclick = () => hlAnswer(true);
+    $("#hl-down").onclick = () => hlAnswer(false);
+    return;
+  }
+  // after an answer: count B up, then move on or end the run
+  const el = $("#hl-b"), msg = $("#hl-msg"), t0 = performance.now(), dur = reduced() ? 0 : 650;
+  const diff = Math.abs(a.a - b.a);
+  const tick = now => {
+    const k = dur ? Math.min(1, (now - t0) / dur) : 1;
+    el.textContent = Math.round(b.a * (1 - (1 - k) ** 3));
+    if (k < 1) return requestAnimationFrame(tick);
+    msg.textContent = right ? `Correct · ${diff} ${b.a > a.a ? "more" : "fewer"}` : `Wrong · ${diff} ${b.a > a.a ? "more" : "fewer"}`;
+    if (right) { const r = run; setTimeout(() => { if (hl.run === r && mode === "hl") hlNext(); }, reduced() ? 600 : 1100); }
+    else renderHLEnd();
+  };
+  requestAnimationFrame(tick);
+}
+function hlAnswer(up) {
+  const run = hl.run, { a, b, level } = run.pair;
+  const right = up === (b.a > a.a);
+  run.answered = { up, right };
+  if (right) { run.streak++; run.trail.push(level); }
+  else {
+    run.over = true;
+    if (run.streak > hl.best) { run.newBest = hl.best > 0; hl.best = run.streak; store.set("hlBest", hl.best); }
+  }
+  renderHL();
+}
+function renderHLEnd() {
+  const run = hl.run, text = hlShareText(run);
+  $("#hl-end").innerHTML = `<section class="panel">
+    <h2>${run.newBest ? "New best streak" : run.streak === 0 ? "Out first time" : `Streak of ${run.streak}`}</h2>
+    ${run.trail.length ? `<p class="trail" aria-label="Pairs you got right, by difficulty">${run.trail.map(L => L.dot).join("")}❌</p>
+    <p class="hint-line" style="margin:0;text-align:center">🟢 easy · 🟡 medium · 🔴 hard</p>` : ""}
+    <pre class="share" id="share-text" hidden>${esc(text)}</pre>
+    <div class="actions"><button class="btn go" id="hl-again">Play again</button><button class="btn" id="hl-share">Share</button></div>
+  </section>`;
+  $("#hl-again").onclick = () => { hlStart(); window.scrollTo({ top: 0 }); };
+  $("#hl-share").onclick = () => send(text, shareBase());
+  $("#hl-again").focus({ preventScroll: true });
+}
+
 // ---------------------------------------------------------------- mode switch
 const view = $("#view");
 let mode = store.get("mode", "solo");
@@ -1353,7 +1525,10 @@ function setMode(mo) {
   $("#mode-daily").setAttribute("aria-pressed", mo === "daily");
   $("#mode-solo").setAttribute("aria-pressed", mo === "solo");
   $("#mode-h2h").setAttribute("aria-pressed", mo === "h2h");
+  $("#mode-hl").setAttribute("aria-pressed", mo === "hl");
+  $("#foot-stat").textContent = mo === "hl" ? "appearances" : "goals";
   if (mo === "daily") renderDaily();
+  else if (mo === "hl") renderHL();
   else if (mo === "solo") renderSolo();
   else if (h2h.online) renderSolo(h2h.online);
   else if (h2h.invite) renderInvite(h2h.invite);
@@ -1366,6 +1541,7 @@ function setMode(mo) {
 $("#mode-daily").onclick = () => setMode("daily");
 $("#mode-solo").onclick = () => setMode("solo");
 $("#mode-h2h").onclick = () => setMode("h2h");
+$("#mode-hl").onclick = () => setMode("hl");
 // ---------------------------------------------------------------- rules sheet
 const rulesEl = $("#rules");
 let rulesReturn = null;

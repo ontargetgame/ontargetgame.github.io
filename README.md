@@ -2,6 +2,8 @@
 
 Pick 3 to 5 Premier League players whose career PL goals add up as close to the target as you can, without going over. Play solo or head-to-head on one phone.
 
+Higher or lower: say whether the next player has more or fewer career PL appearances than the one shown, and build a streak.
+
 Play: https://ontargetgame.github.io/
 
 ## How it's built
