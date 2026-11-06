@@ -308,7 +308,7 @@ small.by { color: var(--muted); font-weight: 500; font-size: .72rem; }
     </div>
     <nav class="gamebar" id="gamebar" hidden>
       <button class="gback" id="back-home">‹ Games</button>
-      <div class="seg modes-bar" id="ot-modes" role="group" aria-label="On Target mode">
+      <div class="seg modes-bar" id="ot-modes" role="group" aria-label="Hit the Target mode">
         <button id="mode-daily" aria-pressed="false">Daily</button>
         <button id="mode-solo" aria-pressed="true">Solo</button>
         <button id="mode-h2h" aria-pressed="false">Head-to-head</button>
@@ -1558,17 +1558,17 @@ function renderHLEnd() {
 // ---------------------------------------------------------------- mode switch
 const view = $("#view");
 let mode = "home";
-// Two games: On Target (Daily / Solo / Head-to-head) and Higher or lower. The home
+// Two games: Hit the Target (Daily / Solo / Head-to-head) and Higher or lower. The home
 // screen shows both as tiles; "‹ Games" or the logo goes back to it.
 const OT_MODES = ["daily", "solo", "h2h"];
 function renderHome() {
   view.innerHTML = `<div class="games">
     <h2>Pick a game</h2>
     <button class="tile t-ot" id="tile-ot">
-      <div><h3>On Target</h3><p>Pick 3 to 5 players whose career PL goals add up as close to the target as you can.</p></div>
+      <div><h3>Hit the Target</h3><p>Pick 3 to 5 players whose career PL goals add up as close to the target as you can.</p></div>
       <div class="tv"><small>Target</small>137</div>
       <div class="tags"><span>📅 Daily</span><span>🎯 Solo</span><span>📱 Head-to-head</span></div>
-      <span class="play">Play On Target</span>
+      <span class="play">Play Hit the Target</span>
     </button>
     <button class="tile t-hl" id="tile-hl">
       <div><h3>Higher or Lower</h3><p>Who has made more Premier League appearances? Keep your streak going.</p></div>
