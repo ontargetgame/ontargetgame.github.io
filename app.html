@@ -184,9 +184,33 @@ button:disabled { cursor: not-allowed; opacity: .45; }
 .tag { display: inline-block; font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; padding: 2px 7px; border-radius: 999px; background: var(--chip); }
 .foot { font-size: .75rem; color: var(--muted); text-align: center; margin: 6px 0 0; }
 
-.modes-bar { flex: 1 1 100%; display: flex; }
+.topr { display: flex; align-items: center; gap: 8px; }
+.logo-btn { all: unset; cursor: pointer; display: flex; align-items: center; gap: 8px; }
+.logo-btn:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; border-radius: 6px; }
+.btn.end { padding: 7px 12px; font-size: .85rem; border-radius: 999px; }
+.gamebar { flex: 1 1 100%; display: flex; align-items: center; gap: 8px; min-width: 0; }
+.gamebar .gback { flex: none; border: 0; background: var(--chip); border-radius: 999px; padding: 9px 12px; font-weight: 700; font-size: .88rem; white-space: nowrap; }
+.gamebar .gname { font: 800 1.15rem/1 var(--display); text-transform: uppercase; letter-spacing: .02em; }
+.modes-bar { flex: 1 1 auto; display: flex; min-width: 0; }
 .modes-bar button { flex: 1 1 auto; white-space: nowrap; padding-inline: 8px; }
-@media (max-width: 380px) { .modes-bar button { padding-inline: 4px; font-size: .8rem; } }
+@media (max-width: 400px) { .modes-bar button, .gamebar .gback { padding-inline: 6px; font-size: .8rem; } }
+@media (max-width: 360px) { .logo { font-size: 1.5rem; } .logo svg { width: 24px; height: 24px; } .btn.end { padding: 6px 10px; font-size: .8rem; } }
+/* home: pick a game */
+.games { display: flex; flex-direction: column; gap: 12px; }
+.games h2 { font: 900 1.5rem/1 var(--display); text-transform: uppercase; margin: 4px 0 0; }
+.tile { all: unset; box-sizing: border-box; cursor: pointer; border-radius: 18px; padding: 18px; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 6px 16px; position: relative; overflow: hidden; }
+.tile:focus-visible { outline: 3px solid var(--gold); outline-offset: 3px; }
+.tile.t-ot { background: var(--board); color: var(--board-ink); }
+.tile.t-hl { background: var(--surface); border: 2px solid var(--line); color: var(--ink); }
+.tile h3 { font: 900 clamp(1.9rem, 9vw, 2.5rem)/.95 var(--display); text-transform: uppercase; margin: 0; }
+.tile p { margin: 6px 0 0; font-size: .92rem; opacity: .85; max-width: 30ch; }
+.tile .play { grid-column: 1 / -1; justify-self: start; margin-top: 8px; font-weight: 700; font-size: .9rem; padding: 8px 14px; border-radius: 999px; background: var(--red); color: #fff; }
+.tile .tv { font: 900 3.4rem/1 var(--display); font-variant-numeric: tabular-nums; text-align: center; }
+.tile .tv small { display: block; font: 600 .62rem/1 var(--body); letter-spacing: .12em; text-transform: uppercase; opacity: .75; margin-bottom: 2px; }
+.tile.t-hl .tv { color: var(--board); }
+.tile .tags { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; }
+.tile .tags span { font-size: .72rem; font-weight: 700; padding: 3px 8px; border-radius: 999px; background: rgb(255 255 255 / .14); }
+.tile.t-hl .tags span { background: var(--chip); }
 .help { width: 34px; height: 34px; border-radius: 50%; border: 1.5px solid var(--line); background: var(--surface); font: 800 1rem/1 var(--display); flex: none; }
 .linkish { border: 0; background: none; padding: 0; color: var(--ink); text-decoration: underline; font: inherit; }
 .overlay { position: fixed; inset: 0; z-index: 30; background: rgb(0 0 0 / .45); display: flex; align-items: flex-end; justify-content: center;
@@ -266,17 +290,23 @@ small.by { color: var(--muted); font-weight: 500; font-size: .72rem; }
 
 <div class="wrap" id="app">
   <header class="top">
-    <h1 class="logo">
+    <h1 class="logo"><button class="logo-btn" id="go-home" aria-label="On Target: all games">
       <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="15" fill="var(--board)"/><circle cx="16" cy="16" r="10.5" fill="var(--bg)"/><circle cx="16" cy="16" r="6" fill="var(--red)"/><circle cx="16" cy="16" r="2.2" fill="var(--bg)"/></svg>
-      On Target
+      On Target</button>
     </h1>
-    <button class="help" id="open-rules" aria-label="How to play" title="How to play">?</button>
-    <div class="seg modes-bar" role="group" aria-label="Game mode">
+    <div class="topr">
+      <button class="btn ghost end" id="end-game" hidden>End game</button>
+      <button class="help" id="open-rules" aria-label="How to play" title="How to play">?</button>
+    </div>
+    <nav class="gamebar" id="gamebar" hidden>
+      <button class="gback" id="back-home">‹ Games</button>
+      <div class="seg modes-bar" id="ot-modes" role="group" aria-label="On Target mode">
         <button id="mode-daily" aria-pressed="false">Daily</button>
         <button id="mode-solo" aria-pressed="true">Solo</button>
         <button id="mode-h2h" aria-pressed="false">Head-to-head</button>
-        <button id="mode-hl" aria-pressed="false">Higher/Lower</button>
-    </div>
+      </div>
+      <span class="gname" id="hl-name">Higher or lower</span>
+    </nav>
   </header>
   <main id="view"></main>
   <p class="foot">Career Premier League <span id="foot-stat">goals</span> since 1992, as of <span id="asof"></span>. <button class="linkish" id="foot-rules">How to play and scoring</button></p>
@@ -1519,15 +1549,60 @@ function renderHLEnd() {
 
 // ---------------------------------------------------------------- mode switch
 const view = $("#view");
-let mode = store.get("mode", "solo");
+let mode = "home";
+// Two games: On Target (Daily / Solo / Head-to-head) and Higher or lower. The home
+// screen shows both as tiles; "‹ Games" or the logo goes back to it.
+const OT_MODES = ["daily", "solo", "h2h"];
+function renderHome() {
+  view.innerHTML = `<div class="games">
+    <h2>Pick a game</h2>
+    <button class="tile t-ot" id="tile-ot">
+      <div><h3>On Target</h3><p>Pick 3 to 5 players whose career PL goals add up as close to the target as you can.</p></div>
+      <div class="tv"><small>Target</small>137</div>
+      <div class="tags"><span>📅 Daily</span><span>🎯 Solo</span><span>📱 Head-to-head</span></div>
+      <span class="play">Play On Target</span>
+    </button>
+    <button class="tile t-hl" id="tile-hl">
+      <div><h3>Higher or Lower</h3><p>Who has made more Premier League appearances? Keep your streak going.</p></div>
+      <div class="tv"><small>PL apps</small>↑↓</div>
+      <div class="tags"><span>🔥 Best streak: ${hl.best}</span></div>
+      <span class="play">Play Higher or Lower</span>
+    </button>
+  </div>`;
+  $("#tile-ot").onclick = () => setMode(store.get("otMode", "solo"));
+  $("#tile-hl").onclick = () => setMode("hl");
+}
+// What "End game" ends in each mode; null when nothing is in progress.
+function activeGame() {
+  if (mode === "solo" && solo.game && !solo.game.over) return { msg: "End this game? Your rounds so far won't count.", end() { solo.game = null; history.replaceState(null, "", location.pathname); } };
+  if (mode === "daily" && daily.game && !daily.game.over) return { msg: "End today's daily? Rounds you haven't played count as skipped, and it can't be replayed today.", end() {
+    const g = daily.game;
+    g.rounds.forEach(r => { if (!r.done) { r.res = skippedRes(r.target); r.done = true; } });
+    while (g.rounds.length < g.n) { const T = g.targets[g.rounds.length]; g.rounds.push({ target: T, picks: [], done: true, res: skippedRes(T) }); }
+    g.over = true; dailySave(g);
+  } };
+  if (mode === "h2h" && ((h2h.online && !h2h.online.over) || (h2h.m && !(h2h.m.cur && h2h.m.cur.phase === "done" && matchOver(h2h.m)))))
+    return { msg: "End this match? It can't be picked up again.", end() { h2h.m = null; h2h.online = null; h2h.invite = null; h2h.teamLink = null; history.replaceState(null, "", location.pathname); } };
+  if (mode === "hl" && hl.run && !hl.run.over) return { msg: `End this run? Your streak of ${hl.run.streak} won't count.`, end() { hl.run = null; } };
+  return null;
+}
+function syncChrome() {
+  $("#end-game").hidden = !activeGame();
+  const home = mode === "home";
+  $("#gamebar").hidden = home;
+  $("#ot-modes").hidden = mode === "hl";
+  $("#hl-name").hidden = mode !== "hl";
+}
 function setMode(mo) {
   mode = mo; store.set("mode", mo);
+  if (OT_MODES.includes(mo)) store.set("otMode", mo);
   $("#mode-daily").setAttribute("aria-pressed", mo === "daily");
   $("#mode-solo").setAttribute("aria-pressed", mo === "solo");
   $("#mode-h2h").setAttribute("aria-pressed", mo === "h2h");
-  $("#mode-hl").setAttribute("aria-pressed", mo === "hl");
-  $("#foot-stat").textContent = mo === "hl" ? "appearances" : "goals";
-  if (mo === "daily") renderDaily();
+  $("#foot-stat").textContent = mo === "hl" ? "appearances" : mo === "home" ? "goals and appearances" : "goals";
+  syncChrome();
+  if (mo === "home") renderHome();
+  else if (mo === "daily") renderDaily();
   else if (mo === "hl") renderHL();
   else if (mo === "solo") renderSolo();
   else if (h2h.online) renderSolo(h2h.online);
@@ -1541,7 +1616,14 @@ function setMode(mo) {
 $("#mode-daily").onclick = () => setMode("daily");
 $("#mode-solo").onclick = () => setMode("solo");
 $("#mode-h2h").onclick = () => setMode("h2h");
-$("#mode-hl").onclick = () => setMode("hl");
+$("#go-home").onclick = $("#back-home").onclick = () => setMode("home");
+$("#end-game").onclick = () => {
+  const a = activeGame();
+  if (!a || !confirm(a.msg)) return;
+  a.end(); setMode(mode); window.scrollTo({ top: 0 });
+};
+// Games start and finish inside their own screens, so keep End game in step with whatever is on screen.
+new MutationObserver(syncChrome).observe(view, { childList: true });
 // ---------------------------------------------------------------- rules sheet
 const rulesEl = $("#rules");
 let rulesReturn = null;
@@ -1572,7 +1654,7 @@ else {
   if (tl) { h2h.teamLink = tl; setMode("h2h"); }
   else if (inv) { h2h.invite = inv; setMode("h2h"); }
   else if (ch) { mode = "solo"; soloStart(ch); setMode("solo"); }
-  else setMode(mode);
+  else setMode("home");
 }
 if (!store.get("seenRules", false)) openRules();
 // A shared link opened in this same tab only changes the hash, so load it properly.
