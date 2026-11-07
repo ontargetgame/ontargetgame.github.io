@@ -312,6 +312,14 @@ small.by { color: var(--muted); font-weight: 500; font-size: .72rem; }
 .hlc.ask .hv b { color: var(--muted); }
 .hlc.ask.right .hv b { color: var(--good); } .hlc.ask.wrong .hv b { color: var(--red); }
 .hlq { text-align: center; font-weight: 600; margin: 0; }
+.live-code { display: flex; align-items: baseline; justify-content: center; gap: 10px; padding: 10px; border-radius: 12px; background: var(--chip); }
+.live-code span { font-size: .74rem; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); font-weight: 700; }
+.live-code b { font: 900 2rem/1 var(--display); letter-spacing: .12em; }
+.live-who { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+.live-who .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--field-line); flex: none; }
+.live-who .dot.on { background: var(--good); box-shadow: 0 0 0 4px rgb(34 116 60 / .2); }
+.live-wait { text-align: center; color: var(--muted); font-weight: 600; margin: 0; min-height: 1.2em; }
+.live-gone { margin: 0; padding: 10px 12px; border-radius: 10px; background: var(--chip); color: var(--red); font-weight: 600; }
 .clock { display: flex; align-items: center; gap: 10px; }
 .clock i { flex: 1; height: 8px; border-radius: 999px; background: var(--chip); overflow: hidden; }
 .clock i b { display: block; height: 100%; width: 100%; background: var(--board-text); transform-origin: left; }
@@ -575,7 +583,7 @@ const roundCard = (k, target, tag, pts, body) => `<li><details class="rcard"><su
   <span class="rpts"><span class="tag">${tag}</span>${pts}</span></summary>${body}</details></li>`;
 const playerRow = (name, r, picks) => `<div class="prow"><span class="who">${esc(name)}</span>
   <span class="pp ${tone(r.pts)}">${signed(r.pts)}</span>
-  <span class="how">${r.skipped ? "Skipped" : `${r.total} goals · ${r.blank ? "Blank, two players on 0" : r.label + ", " + gapText(r)}`}</span>
+  <span class="how">${r.skipped ? "Skipped" : r.timeout ? "Ran out of time: bust" : `${r.total} goals · ${r.blank ? "Blank, two players on 0" : r.label + ", " + gapText(r)}`}</span>
   ${picks.length && !r.skipped ? `<div class="chips">${picks.map(p => `<span>${esc(p.n)} <b>${p.g}</b>${p.by ? ` <small class="by">${esc(p.by)}</small>` : ""}</span>`).join("")}</div>` : ""}</div>`;
 const gapText = r => r.bust ? `${r.gap} over` : r.gap === 0 ? "exact" : `${r.gap} short`;
 
@@ -832,11 +840,14 @@ function soloStart(ch) {
 // The round engine below also runs online matches (g.online set), so it takes the game.
 function soloRound(g) {
   const T = g.targets[g.rounds.length];
-  g.rounds.push({ target: T, combo: findCombo(T, KNOWN) || findCombo(T, SCORERS), picks: [], done: false, res: null });
+  g.rounds.push({ target: T, combo: findCombo(T, KNOWN) || findCombo(T, SCORERS), picks: [], done: false, res: null,
+    deadline: g.online ? Date.now() + LIVE_SECS * 1000 : null });
   renderSolo(g);
 }
 
 const skippedRes = T => ({ skipped: true, pts: 0, label: "Skipped", cls: "miss", gap: T, total: 0 });
+// Online, running out of time with fewer than 3 players picked is a bust.
+const timeoutRes = T => ({ bust: true, timeout: true, pts: -20, label: "Out of time", cls: "bust", gap: 0, total: 0, zone: zone(T) });
 let shown = null;  // the game on screen, so a reveal that finishes after a mode switch doesn't redraw
 function renderSolo(g = solo.game) {
   shown = g;
@@ -858,6 +869,7 @@ function renderSolo(g = solo.game) {
           : `<div class="stat"><b>${best == null ? "–" : num(best)}</b><span>Best ${g.n}-round</span></div>`}
       </section>
       ${boardHTML(r.target)}
+      ${r.deadline && !r.done ? `<div class="clock" id="clock"></div>` : ""}
       <div id="pick"></div>
       <div class="actions" id="acts">
         <button class="btn primary" id="reveal" disabled>Reveal</button>
@@ -874,10 +886,18 @@ function renderSolo(g = solo.game) {
   }
   sync();
   skipBtn.onclick = () => {
+    stopClock();
     r.res = skippedRes(r.target); r.done = true;
     soloNext(g);
   };
+  // Online matches: 60 seconds a round. Out of time reveals what's picked, or busts with fewer than 3.
+  if (r.deadline && !r.done) startClock($("#clock"), r.deadline, LIVE_SECS, () => {
+    if (shown !== g || r.done || revealBtn.dataset.going) return;
+    if (r.picks.length >= 3) { toast("Time's up: revealing"); revealBtn.click(); }
+    else { r.res = timeoutRes(r.target); r.done = true; toast("Out of time: bust"); g.points += r.res.pts; renderSolo(g); }
+  });
   revealBtn.onclick = async () => {
+    stopClock(); revealBtn.dataset.going = "1";
     revealBtn.disabled = true; skipBtn.disabled = true;
     await pk.reveal(run => { $("#tot").textContent = run; });
     r.res = grade(r.target, r.picks); r.done = true;
@@ -903,6 +923,7 @@ function renderSolo(g = solo.game) {
 }
 function resultText(res) {
   return res.blank ? `${res.blank.map(p => esc(p.n)).join(" and ")} have never scored a Premier League goal. You can only use one player on 0, so this round is a Blank: ${num(res.pts)} points.`
+    : res.timeout ? `Out of time with fewer than 3 players picked = ${num(res.pts)} points`
     : res.bust ? `${res.gap} over the target = ${num(res.pts)} points`
     : res.gap === 0 ? "Exact hit = 30 points"
     : res.gap > res.zone ? `${res.gap} short. You needed to be within ${res.zone} to score`
@@ -1369,11 +1390,11 @@ const b64 = {
   dec: str => Uint8Array.from(atob(str.replace(/-/g, "+").replace(/_/g, "/")), c => c.charCodeAt(0)),
 };
 const scramble = (bytes, seed) => { const r = rng(seed ^ 0x5eed); return bytes.map(b => b ^ (r() * 256 | 0)); };
-const resOf = (T, picks) => picks ? grade(T, picks) : skippedRes(T);
-const packSide = rounds => rounds.map(r => r ? r.map(p => [p.n, p.g]) : 0);
+const resOf = (T, picks) => picks === "T" ? timeoutRes(T) : picks ? grade(T, picks) : skippedRes(T);
+const packSide = rounds => rounds.map(r => r === "T" ? 1 : r ? r.map(p => [p.n, p.g]) : 0);
 
 function matchLink(g) {
-  const on = g.online, mine = g.rounds.map(r => r.res.skipped ? null : r.picks);
+  const on = g.online, mine = g.rounds.map(r => r.res.timeout ? "T" : r.res.skipped ? null : r.picks);
   const body = { n: on.names, t: g.targets, p: on.opp ? [packSide(on.opp), packSide(mine)] : [packSide(mine)] };
   const data = b64.enc(scramble(new TextEncoder().encode(JSON.stringify(body)), g.seed));
   return `${shareBase()}#m${g.seed.toString(36)}.${g.n}${g.noRepeat ? "x" : ""}.${data}`;
@@ -1386,7 +1407,7 @@ function readMatch() {
     const d = JSON.parse(new TextDecoder().decode(scramble(b64.dec(h[4]), seed)));
     const names = d.n.slice(0, 2).map(x => String(x).slice(0, 16) || "Friend");
     const targets = d.t.map(x => Math.max(1, Math.min(999, x | 0)));
-    const sides = d.p.slice(0, 2).map(side => side.map(r => Array.isArray(r) && r.length
+    const sides = d.p.slice(0, 2).map(side => side.map(r => r === 1 ? "T" : Array.isArray(r) && r.length
       ? r.slice(0, 5).map(([nm, g]) => ({ n: String(nm).slice(0, 40), g: Math.max(0, Math.min(400, g | 0)) })) : null));
     if (targets.length !== n || !sides.length || sides.some(sd => sd.length !== n) || names.length < sides.length) return null;
     return { seed, n, noRepeat: !!h[3], names, targets, sides };
@@ -1413,7 +1434,8 @@ function matchOf(names, sides, targets, noRepeat) {
     const w = topOf(res.map(r => r.pts));
     if (w >= 0) m.score[w]++;
     m.pts[0] += res[0].pts; m.pts[1] += res[1].pts;
-    m.rounds.push({ target: T, picks: [sides[0][k] || [], sides[1][k] || []], res, w, tot: res.map(r => r.total) });
+    const pk = i => Array.isArray(sides[i][k]) ? sides[i][k] : [];
+    m.rounds.push({ target: T, picks: [pk(0), pk(1)], res, w, tot: res.map(r => r.total) });
   });
   return m;
 }
@@ -1422,29 +1444,31 @@ function oppRoundHTML(g, r) {
   const on = g.online, k = g.rounds.indexOf(r), opp = on.opp[k], o = resOf(r.target, opp), me = r.res;
   const msg = me.pts > o.pts ? "You take the round" : o.pts > me.pts ? `${esc(on.names[0])} takes the round` : "Dead level";
   return `<section class="panel"><h2>${msg}</h2>
-    <div class="rcard">${playerRow(on.names[0], o, opp || [])}${playerRow("You", me, r.picks)}</div></section>`;
+    <div class="rcard">${playerRow(on.names[0], o, Array.isArray(opp) ? opp : [])}${playerRow("You", me, r.picks)}</div></section>`;
 }
 
 function renderOnlineSetup() {
-  const st = h2h.setup, n = st.onlineRounds || 5;
+  const st = h2h.setup, n = st.onlineRounds || 5, kind = st.onlineKind || "live";
   view.innerHTML = `<section class="panel">
     <h2>Head-to-head</h2>
     ${whereToggle("online")}
-    <p class="hint-line" style="margin:0">Play your rounds on your phone, then send the link. Your friend gets the same targets on theirs, and sees your picks round by round after locking in their own.</p>
+    <div class="seg" role="group" aria-label="Online style"><button data-kind="live" aria-pressed="${kind === "live"}">⚡ Live</button><button data-kind="turns" aria-pressed="${kind === "turns"}">Take turns</button></div>
+    <p class="hint-line" style="margin:0">${kind === "live" ? "Play at the same time. Make a room, send your friend the link, and you both get the same target together. 60 seconds a round, and picks show once you've both locked in." : "Play your rounds on your phone, then send the link. Your friend gets the same targets on theirs, and sees your picks round by round after locking in their own. 60 seconds a round."}</p>
     <div class="field"><label for="me">Your name</label><input id="me" maxlength="16" placeholder="Your name" value="${esc(st.me || st.a || "")}"></div>
     <div class="field"><span class="fl">Rounds</span>
       <div class="seg" role="group" aria-label="Number of rounds">
         ${[3, 5, 10].map(k => `<button data-n="${k}" aria-pressed="${n === k}">${k} rounds</button>`).join("")}</div></div>
     <div class="field"><span class="fl">Players</span>${repeatToggle(!!st.noRepeat, "or")}
       <span class="hint-line">${st.noRepeat ? "Hard: each player can only be used once per match." : "Pick anyone, any round."}</span></div>
-    <button class="btn primary" id="online-start">Play my rounds</button>
+    <button class="btn primary" id="online-start">${kind === "live" ? "Make a live room" : "Play my rounds"}</button>
   </section>`;
   const save = () => { st.me = $("#me").value.trim(); store.set("h2h", st); };
   $("#me").oninput = save;
   view.querySelectorAll("[data-where]").forEach(b => b.onclick = () => { save(); st.where = b.dataset.where; store.set("h2h", st); renderSetup(); });
   view.querySelectorAll("[data-n]").forEach(b => b.onclick = () => { save(); st.onlineRounds = +b.dataset.n; store.set("h2h", st); renderOnlineSetup(); });
   view.querySelectorAll("[data-rep]").forEach(b => b.onclick = () => { save(); st.noRepeat = b.dataset.rep === "1"; store.set("h2h", st); renderOnlineSetup(); });
-  $("#online-start").onclick = () => { save(); onlineStart(st.me || "Player 1", n, !!st.noRepeat); };
+  view.querySelectorAll("[data-kind]").forEach(b => b.onclick = () => { save(); st.onlineKind = b.dataset.kind; store.set("h2h", st); renderOnlineSetup(); });
+  $("#online-start").onclick = () => { save(); if (kind === "live") liveCreate(); else onlineStart(st.me || "Player 1", n, !!st.noRepeat); };
 }
 
 // Someone opened an invite (one side) or a finished match (both sides).
@@ -1772,6 +1796,9 @@ function activeGame() {
     while (g.rounds.length < g.n) { const T = g.targets[g.rounds.length]; g.rounds.push({ target: T, picks: [], done: true, res: skippedRes(T) }); }
     g.over = true; dailySave(g);
   } };
+  if (mode === "h2h" && h2h.live && h2h.live.game && h2h.live.game.phase !== "over")
+    return { msg: "Leave this live match? Your friend will be told you've left.", end() { liveLeave(); } };
+  if (mode === "h2h" && h2h.live) return { msg: "Leave this live room?", end() { liveLeave(); } };
   if (mode === "h2h" && ((h2h.online && !h2h.online.over) || (h2h.m && !(h2h.m.cur && h2h.m.cur.phase === "done" && matchOver(h2h.m)))))
     return { msg: "End this match? It can't be picked up again.", end() { h2h.m = null; h2h.online = null; h2h.invite = null; h2h.teamLink = null; history.replaceState(null, "", location.pathname); } };
   if (mode === "hl" && hl.run && !hl.run.over) return { msg: `End this run? Your streak of ${hl.run.streak} won't count.`, end() { hl.run = null; } };
@@ -1798,6 +1825,7 @@ function setMode(mo) {
   else if (mo === "hl") renderHL();
   else if (mo === "lb") renderLB();
   else if (mo === "solo") renderSolo();
+  else if (h2h.live) renderLive();
   else if (h2h.online) renderSolo(h2h.online);
   else if (h2h.invite) renderInvite(h2h.invite);
   else if (h2h.teamLink) renderTeamLink(h2h.teamLink);
@@ -1944,6 +1972,7 @@ function startAccounts() {
     } catch { acct.state = "off"; paintAcct(); return; }
     // Supabase calls this inside its own lock, so the follow-up requests run just after.
     if (mode === "lb") renderLB();
+    if (h2h.live) { liveConnect(); if (mode === "h2h") renderLive(); }
     acct.sb.auth.onAuthStateChange((event, session) => { setTimeout(() => onSession(session, event), 0); });
     acct.sb.auth.getSession().then(({ data }) => { if (!data.session && acct.state === "loading") { acct.state = "out"; paintAcct(); } });
   };
@@ -2169,9 +2198,285 @@ function paintLBList() {
   }).join("")}</ol>`;
 }
 
+// ---------------------------------------------------------------- live head to head
+// Two phones in a room at the same time (Supabase Realtime broadcast, no database).
+// The host makes a room and sends #L<code>; the friend opens it and joins. Each round
+// both get the same target and 60 seconds. Picks stay on each phone until BOTH have
+// locked in; only then does each phone send its picks, so nobody can see the other's
+// early. Out of time with fewer than 3 picks = bust (-20). Lost messages are re-sent
+// every 2 seconds while a phone is waiting, and every message is safe to receive twice.
+const LIVE_SECS = 60;
+const myLiveId = (() => { let v = sessionStorage.getItem("ot.liveId"); if (!v) { v = Math.random().toString(36).slice(2, 10); try { sessionStorage.setItem("ot.liveId", v); } catch {} } return v; })();
+function readLive() {
+  const h = location.hash.match(/^#L([a-z0-9]{6})$/);
+  return h ? { code: h[1], host: false, joined: false } : null;
+}
+const liveLink = L => `${shareBase()}#L${L.code}`;
+const liveName = () => (acct.profile && acct.profile.username) || h2h.setup.me || "";
+const packLive = picks => picks === "T" ? "T" : picks.map(p => [p.n, p.g]);
+const unpackLive = v => v === "T" ? "T" : Array.isArray(v) ? v.slice(0, 5).map(([n, g]) => ({ n: String(n).slice(0, 40), g: Math.max(0, Math.min(400, g | 0)) })) : "T";
+
+function liveCreate() {
+  const n = h2h.setup.onlineRounds || 5;
+  h2h.live = { code: Math.random().toString(36).slice(2, 8).padEnd(6, "0"), host: true, joined: true, n, noRepeat: !!h2h.setup.noRepeat, name: liveName() || "Player 1" };
+  history.replaceState(null, "", location.pathname);
+  liveConnect(); renderLive();
+}
+function liveConnect() {
+  const L = h2h.live;
+  if (!L || L.ch || !L.joined) return;
+  if (!acct.sb) { renderLive(); return; }   // the Supabase client is still loading; startAccounts calls back
+  L.status = "connecting"; L.opp = L.opp || null; L.inbox = L.inbox || {};
+  const ch = acct.sb.channel("ot-live-" + L.code, { config: { broadcast: { self: false }, presence: { key: myLiveId } } });
+  L.ch = ch;
+  ch.on("presence", { event: "sync" }, () => {
+    const st = ch.presenceState(), others = Object.keys(st).filter(k => k !== myLiveId).map(k => ({ id: k, ...st[k][0] }));
+    const host = others.find(o => o.host);
+    if (L.host) {
+      if (!L.game) L.opp = others[0] || null;               // in the lobby: whoever is here
+      else L.gone = !others.some(o => o.id === L.game.guestId);
+    } else {
+      L.hostHere = !!host; if (host) L.hostName = host.name;
+      if (L.game) L.gone = !host;
+    }
+    if (mode === "h2h" && h2h.live === L && (!L.game || L.game.phase !== "play")) renderLive();
+    else if (mode === "h2h" && h2h.live === L) liveBanner();
+  });
+  ch.on("broadcast", { event: "m" }, ({ payload }) => { if (h2h.live === L) liveMsg(L, payload); });
+  ch.subscribe(status => {
+    if (h2h.live !== L) return;
+    if (status === "SUBSCRIBED") { L.status = "on"; ch.track({ name: L.name, host: L.host }); }
+    else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") L.status = "error";
+    if (mode === "h2h" && (!L.game || L.game.phase !== "play")) renderLive();
+  });
+  clearInterval(L.timer); L.timer = setInterval(() => liveResend(L), 2000);
+}
+const liveSend = (L, m) => L.ch && L.ch.send({ type: "broadcast", event: "m", payload: { ...m, from: myLiveId } });
+function liveLeave() {
+  const L = h2h.live; if (!L) return;
+  clearInterval(L.timer); stopClock();
+  if (L.ch) { liveSend(L, { t: "bye" }); acct.sb.removeChannel(L.ch); }
+  h2h.live = null; history.replaceState(null, "", location.pathname);
+}
+// Host starts (or restarts, for a rematch) with a fresh seed; the guest learns it from "start".
+function liveStart(L) {
+  const seed = 1 + Math.floor(Math.random() * 999999999);
+  L.startMsg = { t: "start", seed, n: L.n, noRepeat: L.noRepeat, names: [L.name, L.opp.name || "Friend"], guestId: L.opp.id, game: (L.gameNo || 0) + 1 };
+  L.acked = false;
+  liveBegin(L, L.startMsg);
+  liveSend(L, L.startMsg);
+}
+function liveBegin(L, s) {
+  L.gameNo = s.game;
+  L.game = { seed: s.seed, n: s.n, noRepeat: s.noRepeat, names: s.names, guestId: s.guestId, me: L.host ? 0 : 1,
+    targets: gameTargets(s.seed, s.n), rounds: [], used: new Set(), pts: [0, 0], phase: "play", rematch: false };
+  L.inbox = {};
+  liveRound(L);
+}
+function liveRound(L) {
+  const g = L.game, k = g.rounds.length;
+  g.rounds.push({ target: g.targets[k], picks: [], mine: null, theirs: null, oppLocked: false, sentShow: false, ready: false, oppReady: false,
+    deadline: Date.now() + LIVE_SECS * 1000, res: null });
+  const box = L.inbox[k] || {}; delete L.inbox[k];
+  const r = g.rounds[k];
+  if (box.lock) r.oppLocked = true;
+  if (box.show !== undefined) { r.oppLocked = true; r.theirs = box.show; }
+  if (box.next) r.oppReady = true;
+  g.phase = "play";
+  renderLive(); window.scrollTo({ top: 0 });
+}
+function liveMsg(L, m) {
+  if (m.t === "bye") { L.gone = true; if (!L.game || L.game.phase !== "play") renderLive(); else liveBanner(); return; }
+  if (m.t === "start") {
+    if (L.host) return;
+    if (m.guestId !== myLiveId) { L.full = true; renderLive(); return; }
+    liveSend(L, { t: "go", game: m.game });
+    if (!L.game || m.game > (L.gameNo || 0)) liveBegin(L, m);
+    return;
+  }
+  if (m.t === "go") { if (L.host && m.game === L.gameNo) L.acked = true; return; }
+  if (m.t === "rematch") { if (L.game && m.game === L.gameNo && !L.game.rematch) { L.game.rematch = true; if (L.game.phase === "over") renderLive(); } return; }
+  const g = L.game; if (!g || m.game !== L.gameNo) return;
+  const r = g.rounds[m.k];
+  if (!r) { const b = L.inbox[m.k] = L.inbox[m.k] || {}; if (m.t === "lock") b.lock = true; if (m.t === "show") b.show = unpackLive(m.picks); if (m.t === "next") b.next = true; return; }
+  if (m.t === "lock") { r.oppLocked = true; liveTryShow(L, r, m.k); }
+  if (m.t === "show" && r.theirs === null) { r.oppLocked = true; r.theirs = unpackLive(m.picks); liveTryShow(L, r, m.k); }
+  if (m.t === "next") { r.oppReady = true; liveTryNext(L, r); }
+  if (g.phase === "play" && !r.res) liveWaitLine(L, r);
+}
+// Send my picks only once both have locked; reveal once both sides' picks are here.
+function liveTryShow(L, r, k) {
+  if (r.mine === null || !r.oppLocked) return;
+  if (!r.sentShow) { r.sentShow = true; liveSend(L, { t: "show", game: L.gameNo, k, picks: packLive(r.mine) }); }
+  if (r.theirs !== null && !r.res) liveReveal(L, r);
+}
+const liveRes = (T, picks) => picks === "T" ? timeoutRes(T) : grade(T, picks);
+function liveReveal(L, r) {
+  const g = L.game;
+  r.res = [null, null];
+  r.res[g.me] = liveRes(r.target, r.mine); r.res[1 - g.me] = liveRes(r.target, r.theirs);
+  r.both = [null, null]; r.both[g.me] = r.mine; r.both[1 - g.me] = r.theirs;
+  g.pts[0] += r.res[0].pts; g.pts[1] += r.res[1].pts;
+  if (Array.isArray(r.mine)) r.mine.forEach(p => g.used.add(p.id));
+  g.phase = "reveal"; stopClock();
+  renderLive();
+}
+function liveTryNext(L, r) {
+  const g = L.game;
+  if (!r.ready || !r.oppReady || g.phase !== "reveal" || g.rounds[g.rounds.length - 1] !== r) return;
+  if (g.rounds.length < g.n) liveRound(L);
+  else { g.phase = "over"; renderLive(); }
+}
+function liveLock(L, r, timedOut) {
+  if (r.mine !== null) return;
+  stopClock();
+  r.mine = r.picks.length >= 3 ? r.picks.slice() : "T";
+  if (timedOut) toast(r.mine === "T" ? "Out of time: bust" : "Time's up: locked in");
+  liveSend(L, { t: "lock", game: L.gameNo, k: L.game.rounds.indexOf(r) });
+  liveTryShow(L, r, L.game.rounds.indexOf(r));
+  if (!r.res) renderLive();
+}
+function liveResend(L) {
+  if (!L.ch || L.status !== "on") return;
+  if (L.host && L.startMsg && !L.acked) liveSend(L, L.startMsg);
+  const g = L.game; if (!g) return;
+  const k = g.rounds.length - 1, r = g.rounds[k]; if (!r) return;
+  if (r.sentShow) liveSend(L, { t: "show", game: L.gameNo, k, picks: packLive(r.mine) });
+  else if (r.mine !== null) liveSend(L, { t: "lock", game: L.gameNo, k });
+  if (r.ready) liveSend(L, { t: "next", game: L.gameNo, k });
+  if (g.phase === "over" && g.rematchSent) liveSend(L, { t: "rematch", game: L.gameNo });
+}
+function liveBanner() {
+  const el = $("#live-gone"); if (!el || !h2h.live) return;
+  el.hidden = !h2h.live.gone;
+}
+function liveWaitLine(L, r) {
+  const el = $("#live-wait"); if (!el) return;
+  const opp = L.game.names[1 - L.game.me];
+  el.textContent = r.mine !== null ? (r.oppLocked ? "Both locked in. Revealing…" : `Locked in. Waiting for ${opp}…`) : r.oppLocked ? `${opp} has locked in` : `${opp} is picking…`;
+}
+
+function renderLive() {
+  const L = h2h.live;
+  if (!L || mode !== "h2h") return;
+  shown = null;
+  const gone = `<p class="live-gone" id="live-gone" ${L.gone ? "" : "hidden"}>Your friend has left the room. <button class="linkish" id="live-quit">Leave match</button></p>`;
+  if (L.full) { view.innerHTML = `<section class="panel"><h2>Room full</h2><p class="hint-line">Two people are already playing in this room.</p><button class="btn primary" id="live-out">Back</button></section>`; $("#live-out").onclick = () => { liveLeave(); renderSetup(); }; return; }
+  // A friend opening the link: ask for a name, then join.
+  if (!L.joined) {
+    view.innerHTML = `<section class="panel"><h2>Live match</h2>
+      <p class="hint-line" style="margin:0">A friend has invited you to play Hit the Target live: same targets at the same time, 60 seconds a round.</p>
+      <div class="field"><label for="live-me">Your name</label><input id="live-me" maxlength="16" placeholder="Your name" value="${esc(liveName())}"></div>
+      <div class="actions"><button class="btn primary" id="live-join">Join match</button><button class="btn ghost" id="live-no">Not now</button></div></section>`;
+    $("#live-join").onclick = () => { const nm = $("#live-me").value.trim(); if (!acct.profile) { h2h.setup.me = nm; store.set("h2h", h2h.setup); } L.name = nm || "Player 2"; L.joined = true; liveConnect(); renderLive(); };
+    $("#live-no").onclick = () => { liveLeave(); renderSetup(); };
+    return;
+  }
+  if (!acct.sb || L.status === "connecting" || !L.status) {
+    view.innerHTML = acct.state === "off" ? `<section class="panel"><h2>Can't connect</h2><p class="hint-line">Live play needs a connection. Check your signal and try again.</p><button class="btn primary" id="live-out">Back</button></section>`
+      : `<section class="panel"><h2>Live match</h2><p class="hint-line">Connecting…</p></section>`;
+    const o = $("#live-out"); if (o) o.onclick = () => { liveLeave(); renderSetup(); };
+    return;
+  }
+  if (L.status === "error") {
+    view.innerHTML = `<section class="panel"><h2>Connection lost</h2><p class="hint-line">Couldn't reach the live room. Check your signal and start a new match.</p><button class="btn primary" id="live-out">Back</button></section>`;
+    $("#live-out").onclick = () => { liveLeave(); renderSetup(); }; return;
+  }
+  const g = L.game;
+  if (!g) {
+    // Lobby.
+    if (L.host) {
+      const link = liveLink(L);
+      view.innerHTML = `<section class="panel"><h2>Live room</h2>
+        <p class="hint-line" style="margin:0">Send this link to a friend. When they open it you'll both be in the room, then you start. ${L.n} rounds, 60 seconds each.</p>
+        <div class="live-code"><span>Room</span><b>${L.code.toUpperCase()}</b></div>
+        <div class="actions"><button class="btn primary" id="live-invite">Send invite</button></div>
+        <pre class="share" id="share-text" hidden></pre>
+        <div class="live-who">${L.opp ? `<span class="dot on"></span><b>${esc(L.opp.name || "Friend")}</b> is here` : `<span class="dot"></span>Waiting for your friend to join…`}</div>
+        <div class="actions"><button class="btn go" id="live-go" ${L.opp ? "" : "disabled"}>Start match</button><button class="btn ghost" id="live-out">Cancel</button></div>
+        <p class="hint-line" style="margin:0">Keep this page open. Live matches end if either of you closes or refreshes the page.</p></section>`;
+      $("#live-invite").onclick = () => send(`${L.name} has challenged you to a live game of On Target 🎯 Join now:`, link);
+      $("#live-go").onclick = () => { if (L.opp) liveStart(L); };
+    } else {
+      view.innerHTML = `<section class="panel"><h2>Live match</h2>
+        <div class="live-who">${L.hostHere ? `<span class="dot on"></span>You're in <b>${esc(L.hostName || "your friend")}</b>'s room. Waiting for them to start…` : `<span class="dot"></span>Waiting for your friend to open the room…`}</div>
+        <p class="hint-line" style="margin:0">Keep this page open. You'll both get the same target at the same time, with 60 seconds a round.</p>
+        <button class="btn ghost" id="live-out">Leave</button></section>`;
+    }
+    $("#live-out").onclick = () => { liveLeave(); renderSetup(); };
+    return;
+  }
+  const me = g.me, names = g.names, opp = names[1 - me];
+  const score = `<section class="stats three" aria-label="Score">
+      <div class="stat"><b>${g.rounds.length}/${g.n}</b><span>Round</span></div>
+      <div class="stat"><b>${num(g.pts[me])}</b><span>You</span></div>
+      <div class="stat"><b>${num(g.pts[1 - me])}</b><span>${esc(opp)}</span></div></section>`;
+  if (g.phase === "over") {
+    const d = g.pts[me] - g.pts[1 - me];
+    view.innerHTML = `<div style="display:flex;flex-direction:column;gap:14px">${gone}
+      <section class="board"><div><div class="lab">Live · ${g.n} rounds</div><div class="num" style="font-size:clamp(2rem,10vw,2.8rem)">${d > 0 ? "You win" : d < 0 ? `${esc(opp)} wins` : "Draw"}</div><div class="lab">${num(g.pts[me])} – ${num(g.pts[1 - me])}</div></div></section>
+      <section class="panel"><h2>Round by round</h2>
+        <ol class="rounds">${g.rounds.map((r, k) => roundCard(k, r.target, r.res[me].pts > r.res[1 - me].pts ? "You" : r.res[me].pts < r.res[1 - me].pts ? esc(opp) : "Level",
+          `<span class="${tone(r.res[me].pts)}">${signed(r.res[me].pts)}</span> · <span class="${tone(r.res[1 - me].pts)}">${signed(r.res[1 - me].pts)}</span>`,
+          playerRow("You", r.res[me], Array.isArray(r.both[me]) ? r.both[me] : []) + playerRow(opp, r.res[1 - me], Array.isArray(r.both[1 - me]) ? r.both[1 - me] : []))).join("")}</ol>
+        <div class="actions"><button class="btn go" id="live-again" ${g.rematchSent ? "disabled" : ""}>${g.rematchSent ? "Waiting for " + esc(opp) + "…" : g.rematch ? `${esc(opp)} wants a rematch: play again` : "Rematch"}</button><button class="btn ghost" id="live-out">Leave</button></div>
+      </section></div>`;
+    $("#live-again").onclick = () => {
+      if (L.host) { liveStart(L); return; }   // the host starts the new game; the guest asks for one
+      g.rematchSent = true; liveSend(L, { t: "rematch", game: L.gameNo }); renderLive();
+    };
+    $("#live-out").onclick = () => { liveLeave(); setMode("h2h"); };
+    const q = $("#live-quit"); if (q) q.onclick = () => { liveLeave(); setMode("h2h"); };
+    return;
+  }
+  const r = g.rounds[g.rounds.length - 1], last = g.rounds.length === g.n;
+  view.innerHTML = `<div style="display:flex;flex-direction:column;gap:14px">${gone}
+    <div class="challenge"><b>Live vs ${esc(opp)}</b> Same target, 60 seconds. Picks show when you've both locked in.</div>
+    ${score}
+    ${boardHTML(r.target)}
+    ${r.res ? "" : `<div class="clock" id="clock"></div>`}
+    <div id="pick"></div>
+    <p class="live-wait" id="live-wait" aria-live="polite"></p>
+    <div class="actions" id="acts">${r.res ? "" : `<button class="btn primary" id="lock" disabled>Lock in</button>`}</div>
+    <div id="res"></div></div>`;
+  const q = $("#live-quit"); if (q) q.onclick = () => { liveLeave(); setMode("h2h"); };
+  const mine = Array.isArray(r.mine) ? r.mine : r.picks;
+  const pk = picker($("#pick"), { id: "live-search", picks: r.mine === null ? r.picks : mine, pool: PICKABLE, used: g.noRepeat ? g.used : null, onChange: sync });
+  function sync() {
+    const b = $("#lock"); if (b) b.disabled = r.picks.length < 3 || r.mine !== null;
+    if (!r.res) $("#gapline").textContent = r.mine === "T" ? "Bust" : r.mine ? "Locked in" : r.picks.length < 3 ? `Pick ${3 - r.picks.length} more` : `${r.picks.length} picked · lock in`;
+  }
+  liveWaitLine(L, r);
+  if (!r.res) {
+    if (r.mine !== null) { pk.lock(); $("#lock").hidden = true; $("#clock").hidden = true; }
+    else {
+      $("#lock").onclick = () => liveLock(L, r, false);
+      startClock($("#clock"), r.deadline, LIVE_SECS, () => { if (h2h.live === L && L.game === g && r.mine === null) liveLock(L, r, true); });
+    }
+    sync();
+    return;
+  }
+  // Reveal: flip my cards, then show both sides.
+  const rm = r.res[me], ro = r.res[1 - me];
+  if (r.revealed) pk.showAll(); else { r.revealed = true; pk.reveal(run => { const t = $("#tot"); if (t) t.textContent = run; }).then(() => { if (h2h.live === L && L.game === g) showRes(); }); }
+  if (r.revealed && r.shownRes) showRes();
+  function showRes() {
+    r.shownRes = true;
+    $("#tot").textContent = rm.total; $("#gapline").textContent = rm.timeout ? "Out of time" : gapText(rm);
+    $("#live-wait").textContent = "";
+    const msg = rm.pts > ro.pts ? "You take the round" : ro.pts > rm.pts ? `${esc(opp)} takes the round` : "Dead level";
+    $("#res").innerHTML = `<section class="panel"><h2>${msg}</h2>
+      <div class="rcard">${playerRow("You", rm, Array.isArray(r.mine) ? r.mine : [])}${playerRow(opp, ro, Array.isArray(r.theirs) ? r.theirs : [])}</div></section>`;
+    $("#acts").innerHTML = `<button class="btn go" id="next" ${r.ready ? "disabled" : ""}>${r.ready ? `Waiting for ${esc(opp)}…` : last ? "See the result" : "Next round"}</button>`;
+    $("#res").after($("#acts"));
+    $("#next").onclick = () => { r.ready = true; liveSend(L, { t: "next", game: L.gameNo, k: g.rounds.length - 1 }); liveTryNext(L, r); if (L.game === g && g.phase === "reveal") { $("#next").disabled = true; $("#next").textContent = `Waiting for ${opp}…`; } };
+  }
+}
+
 if (!ALL.length) view.innerHTML = `<section class="panel"><h2>Player list missing</h2><p class="hint-line">players.js didn't load, so there's nobody to pick.</p></section>`;
 else {
-  const ch = readChallenge(), inv = readMatch(), tl = readTeamLink();
+  const ch = readChallenge(), inv = readMatch(), tl = readTeamLink(), lv = readLive();
+  if (lv) { h2h.live = lv; setMode("h2h"); } else
   if (tl) { h2h.teamLink = tl; setMode("h2h"); }
   else if (inv) { h2h.invite = inv; setMode("h2h"); }
   else if (ch) { mode = "solo"; soloStart(ch); setMode("solo"); }
@@ -2179,7 +2484,7 @@ else {
 }
 if (!store.get("seenRules", false)) openRules();
 // A shared link opened in this same tab only changes the hash, so load it properly.
-addEventListener("hashchange", () => { if (/^#[gmt]/.test(location.hash)) location.reload(); });
+addEventListener("hashchange", () => { if (/^#[gmtL]/.test(location.hash)) location.reload(); });
 })();
 </script>
 
