@@ -2200,10 +2200,12 @@ function paintLBList() {
 const LIVE_SECS = 60;
 const myLiveId = (() => { let v = sessionStorage.getItem("ot.liveId"); if (!v) { v = Math.random().toString(36).slice(2, 10); try { sessionStorage.setItem("ot.liveId", v); } catch {} } return v; })();
 function readLive() {
-  const h = location.hash.match(/^#L([a-z0-9]{6})$/);
-  return h ? { code: h[1], host: false, joined: false } : null;
+  const h = location.hash.match(/^#L([a-z0-9]{6})(?:~([^#]{1,60}))?$/);
+  if (!h) return null;
+  let from = ""; try { from = decodeURIComponent(h[2] || "").slice(0, 16); } catch {}
+  return { code: h[1], host: false, joined: false, from };
 }
-const liveLink = L => `${shareBase()}#L${L.code}`;
+const liveLink = L => `${shareBase()}#L${L.code}~${encodeURIComponent(L.name)}`;
 const liveName = () => (acct.profile && acct.profile.username) || h2h.setup.me || "";
 const packLive = picks => picks === "T" ? "T" : picks.map(p => [p.n, p.g]);
 const unpackLive = v => v === "T" ? "T" : Array.isArray(v) ? v.slice(0, 5).map(([n, g]) => ({ n: String(n).slice(0, 40), g: Math.max(0, Math.min(400, g | 0)) })) : "T";
@@ -2356,8 +2358,9 @@ function renderLive() {
   if (L.full) { view.innerHTML = `<section class="panel"><h2>Room full</h2><p class="hint-line">Two people are already playing in this room.</p><button class="btn primary" id="live-out">Back</button></section>`; $("#live-out").onclick = () => { liveLeave(); renderSetup(); }; return; }
   // A friend opening the link: ask for a name, then join.
   if (!L.joined) {
-    view.innerHTML = `<section class="panel"><h2>Live match</h2>
-      <p class="hint-line" style="margin:0">A friend has invited you to play Hit the Target live: same targets at the same time, 60 seconds a round.</p>
+    view.innerHTML = `<section class="panel"><h2>⚽ You've been challenged</h2>
+      <p style="margin:0"><b>${esc(L.from || "A friend")}</b> wants to play you live. Who has the better ball knowledge?</p>
+      <p class="hint-line" style="margin:0">You both get the same target and pick 3 to 5 Premier League players whose career goals add up as close to it as you can, without going over. 60 seconds a round, and you see each other's picks once you've both locked in.</p>
       <div class="field"><label for="live-me">Your name</label><input id="live-me" maxlength="16" placeholder="Your name" value="${esc(liveName())}"></div>
       <div class="actions"><button class="btn primary" id="live-join">Join match</button><button class="btn ghost" id="live-no">Not now</button></div></section>`;
     $("#live-join").onclick = () => { const nm = $("#live-me").value.trim(); if (!acct.profile) { h2h.setup.me = nm; store.set("h2h", h2h.setup); } L.name = nm || "Player 2"; L.joined = true; liveConnect(); renderLive(); };
