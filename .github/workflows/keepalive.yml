@@ -1,0 +1,15 @@
+# Free Supabase projects pause after about a week with no activity.
+# This reads one tiny public row twice a week so the accounts database stays awake.
+name: Keep accounts database awake
+on:
+  schedule:
+    - cron: "17 9 * * 1,4"
+  workflow_dispatch:
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Read the heartbeat row
+        run: |
+          curl -fsS "https://yaadccukstmttbpxjdlf.supabase.co/rest/v1/heartbeat?select=id" \
+            -H "apikey: sb_publishable_INcO6XZ33ADqcFxMvpsljA_prY1m7bY"

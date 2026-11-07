@@ -311,6 +311,31 @@ small.by { color: var(--muted); font-weight: 500; font-size: .72rem; }
 .hlbtns .down { background: var(--red-fill); color: #fff; }
 .hl-msg { text-align: center; font: 800 1.3rem/1.1 var(--display); text-transform: uppercase; margin: 0; min-height: 1.3em; }
 .hl-msg.pos { color: var(--good); } .hl-msg.neg { color: var(--red); }
+/* accounts */
+.acct-btn { display: grid; place-items: center; padding: 0; color: var(--ink); }
+.acct-btn svg { width: 20px; height: 20px; }
+.acct-btn.on { border-color: var(--board-text); }
+.bdg { font-size: 1.3rem; line-height: 1; }
+.bdg.big { font-size: 2.4rem; }
+#acct-body { display: flex; flex-direction: column; gap: 12px; }
+#acct-body p { margin: 0; }
+.acct-form { display: flex; flex-direction: column; gap: 10px; }
+.acct-form .btn.primary { flex: none; }
+.acct-big { font: 900 1.5rem/1 var(--display); text-transform: uppercase; }
+.acct-err { color: var(--red); font-weight: 600; font-size: .9rem; }
+.hint-line.ok, #acct-body .ok { color: var(--good); text-transform: none; letter-spacing: 0; }
+.hint-line.bad { color: var(--red); }
+#acct-body .fl { font-size: .74rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 600; }
+.badges { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
+.badges button { font-size: 1.4rem; padding: 8px 0; border-radius: 10px; border: 2px solid var(--line); background: var(--bg); min-height: 44px; }
+.badges button[aria-checked="true"] { border-color: var(--board-text); background: var(--chip); }
+.me { display: flex; align-items: center; gap: 12px; }
+.me b { display: block; font: 900 1.5rem/1.1 var(--display); }
+.recs { display: grid; gap: 1px; background: var(--line); border-radius: 12px; overflow: hidden; border: 1px solid var(--line); }
+.recs div { display: flex; justify-content: space-between; gap: 10px; padding: 9px 12px; background: var(--surface); font-size: .92rem; }
+.recs b { font-variant-numeric: tabular-nums; }
+.home-acct { text-align: center; margin: 4px 0 0; color: var(--muted); font-size: .9rem; }
+.home-acct .linkish { color: var(--ink); font-weight: 700; }
 @media (min-width: 900px) { .wrap { max-width: 640px; } }
 @media (max-width: 380px) {
   .vs { grid-template-columns: 1fr; }
@@ -328,6 +353,7 @@ small.by { color: var(--muted); font-weight: 500; font-size: .72rem; }
     </h1>
     <div class="topr">
       <button class="btn ghost end" id="end-game" hidden>End game</button>
+      <button class="help acct-btn" id="open-acct" aria-label="Sign in"></button>
       <button class="help" id="open-rules" aria-label="How to play" title="How to play">?</button>
     </div>
     <nav class="gamebar" id="gamebar" hidden>
@@ -433,6 +459,13 @@ small.by { color: var(--muted); font-weight: 500; font-size: .72rem; }
     <div class="dots" id="dots"></div>
     <div class="actions"><button class="btn ghost" id="rules-back">Back</button><button class="btn primary" id="rules-next">Next</button></div>
     </div>
+  </section>
+</div>
+
+<div class="overlay" id="acct" hidden>
+  <section class="sheet" role="dialog" aria-modal="true" aria-labelledby="acct-title" tabindex="-1">
+    <div class="sheet-head"><h2 id="acct-title">Your account</h2><button class="close" id="close-acct" aria-label="Close">×</button></div>
+    <div id="acct-body"></div>
   </section>
 </div>
 
@@ -1652,6 +1685,7 @@ function renderHome() {
       <div class="tags"><span>🔥 Best: ${hl.best.easy} easy · ${hl.best.hard} hard</span></div>
       <span class="play">Play Higher or Lower</span>
     </button>
+    <p class="home-acct" id="home-acct" ${acct.user ? "hidden" : ""}><button class="linkish">Sign in</button> to save your stats on any phone</p>
   </div>`;
   $("#tile-ot").onclick = () => setMode(store.get("otMode", "solo"));
   $("#tile-hl").onclick = () => setMode("hl");
@@ -1752,6 +1786,237 @@ $("#open-rules").onclick = $("#foot-rules").onclick = openRules;
 $("#close-rules").onclick = closeRules;
 rulesEl.addEventListener("click", e => { if (e.target === rulesEl) closeRules(); });
 document.addEventListener("keydown", e => { if (e.key === "Escape" && !rulesEl.hidden) closeRules(); });
+// ---------------------------------------------------------------- accounts
+// Optional sign-in (email link) through Supabase. Guests play exactly as before; signing in
+// saves bests and the daily streak to an account so they follow you to any phone.
+// The publishable key is meant to sit in the page: the database's security rules decide
+// what it can do (each player can only change their own profile and stats).
+const SB_URL = "https://yaadccukstmttbpxjdlf.supabase.co";
+const SB_KEY = "sb_publishable_INcO6XZ33ADqcFxMvpsljA_prY1m7bY";
+const BADGES = ["⚽", "🎯", "🦁", "🦅", "🐓", "🍒", "🔨", "⭐", "🐝", "🦊", "🧤", "🏆"];
+const SYNC_KEYS = ["bestGame", "daily", "hlBest"];
+const acct = { sb: null, state: "loading", user: null, profile: null, sent: null, err: "", busy: false, pushTimer: null, synced: false, editName: false };
+const acctEl = $("#acct");
+let acctReturn = null;
+
+const localStats = () => ({ bestGame: solo.best, daily: daily.log, hlBest: hl.best });
+function mergeStats(a, b) {
+  const best = {};
+  [a.bestGame || {}, b.bestGame || {}].forEach(o => Object.entries(o).forEach(([k, v]) => { if (typeof v === "number") best[k] = best[k] == null ? v : Math.max(best[k], v); }));
+  const da = a.daily || {}, db = b.daily || {}, days = { ...(db.days || {}), ...(da.days || {}) };
+  Object.keys(days).sort().slice(0, -60).forEach(k => delete days[k]);
+  const la = da.last || "", lb = db.last || "", last = la >= lb ? la : lb;
+  const streak = la === lb ? Math.max(da.streak || 0, db.streak || 0) : (la > lb ? da.streak : db.streak) || 0;
+  const dl = { last: last || null, streak, best: Math.max(da.best || 0, db.best || 0, streak), played: Math.max(da.played || 0, db.played || 0, Object.keys(days).length), days };
+  const ha = a.hlBest || {}, hb = b.hlBest || {};
+  const hlb = { easy: Math.max(ha.easy || 0, hb.easy || 0), hard: Math.max(ha.hard || 0, hb.hard || 0) };
+  return { bestGame: best, daily: dl, hlBest: hlb };
+}
+function applyStats(s) {
+  solo.best = s.bestGame; daily.log = s.daily; hl.best = s.hlBest;
+  rawSet("bestGame", s.bestGame); rawSet("daily", s.daily); rawSet("hlBest", s.hlBest);
+}
+// Saving any synced stat also queues an upload when signed in.
+const rawSet = store.set;
+store.set = (k, v) => { rawSet(k, v); if (SYNC_KEYS.includes(k)) queuePush(); };
+function queuePush() {
+  if (!acct.profile) return;
+  clearTimeout(acct.pushTimer);
+  acct.pushTimer = setTimeout(pushStats, 1500);
+}
+async function pushStats() {
+  if (!acct.profile) return;
+  const { error } = await acct.sb.from("player_stats").upsert({ user_id: acct.user.id, data: localStats() });
+  acct.synced = !error;
+}
+async function pullStats() {
+  const { data, error } = await acct.sb.from("player_stats").select("data").eq("user_id", acct.user.id).maybeSingle();
+  if (error) return;
+  const remote = (data && data.data) || {}, merged = mergeStats(localStats(), remote);
+  applyStats(merged);
+  if (JSON.stringify(merged) !== JSON.stringify(remote)) await pushStats(); else acct.synced = true;
+  if (mode === "home") renderHome();
+}
+
+async function loadProfile() {
+  const { data, error } = await acct.sb.from("profiles").select("id,username,badge,username_changed_at").eq("id", acct.user.id).maybeSingle();
+  if (error) { acct.err = "Couldn't reach your account. Check your connection."; return; }
+  acct.profile = data || null;
+}
+async function onSession(session, event) {
+  const user = session && session.user;
+  if ((user && user.id) === (acct.user && acct.user.id)) return;
+  acct.user = user || null; acct.profile = null; acct.synced = false;
+  if (!user) { acct.state = "out"; paintAcct(); return; }
+  acct.state = "in";
+  await loadProfile();
+  if (acct.profile) await pullStats();
+  paintAcct();
+  // Just back from the email link with no username yet: ask for one straight away.
+  if (location.hash === "#") history.replaceState(null, "", location.pathname);
+  if (acct.fromLink && !acct.profile && acctEl.hidden) openAcct();
+  acct.fromLink = false;
+}
+
+function startAccounts() {
+  const s = document.createElement("script");
+  s.src = "vendor/supabase-2.110.0.js";
+  s.onerror = () => { acct.state = "off"; paintAcct(); };
+  s.onload = () => {
+    try {
+      acct.sb = window.supabase.createClient(SB_URL, SB_KEY, { auth: { flowType: "implicit", detectSessionInUrl: true, persistSession: true, autoRefreshToken: true } });
+    } catch { acct.state = "off"; paintAcct(); return; }
+    // Supabase calls this inside its own lock, so the follow-up requests run just after.
+    acct.sb.auth.onAuthStateChange((event, session) => { setTimeout(() => onSession(session, event), 0); });
+    acct.sb.auth.getSession().then(({ data }) => { if (!data.session && acct.state === "loading") { acct.state = "out"; paintAcct(); } });
+  };
+  document.head.appendChild(s);
+  acct.fromLink = /access_token=/.test(location.hash);
+  // A link that failed (expired or already used) comes back as #error=...
+  const h = new URLSearchParams(location.hash.slice(1));
+  if (h.get("error")) {
+    acct.err = h.get("error_code") === "otp_expired" ? "That sign-in link has expired or was already used. Send a new one." : "Sign-in didn't work. Send a new link.";
+    history.replaceState(null, "", location.pathname);
+    setTimeout(openAcct, 0);
+  }
+}
+
+function paintAcct() {
+  const b = $("#open-acct");
+  b.innerHTML = acct.profile ? `<span class="bdg">${esc(acct.profile.badge)}</span>` : PERSON_ICON;
+  b.setAttribute("aria-label", acct.profile ? `Your account: ${acct.profile.username}` : "Sign in");
+  b.classList.toggle("on", !!acct.profile);
+  if (!acctEl.hidden) renderAcct();
+  if (mode === "home") { const n = $("#home-acct"); if (n) n.hidden = !!acct.user; }
+}
+const PERSON_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"/></svg>';
+const nameRule = u => /^[A-Za-z0-9_]{3,15}$/.test(u);
+
+function renderAcct() {
+  const body = $("#acct-body"), err = acct.err ? `<p class="acct-err" role="alert">${esc(acct.err)}</p>` : "";
+  if (acct.state === "loading") { body.innerHTML = `<p class="hint-line">Loading…</p>`; return; }
+  if (acct.state === "off") { body.innerHTML = `<p>Accounts aren't available right now. You can still play as a guest, and your stats stay on this phone.</p>`; return; }
+  if (acct.state === "out") {
+    if (acct.sent) {
+      body.innerHTML = `<p class="acct-big">📬 Check your email</p>
+        <p>We sent a sign-in link to <b>${esc(acct.sent)}</b>. Open it on this phone and you'll come straight back here, signed in.</p>
+        <p class="hint-line">Nothing there? Check spam, or wait a minute and send it again.</p>
+        <div class="actions"><button class="btn" id="acct-again">Use a different email</button></div>`;
+      $("#acct-again").onclick = () => { acct.sent = null; acct.err = ""; renderAcct(); };
+      return;
+    }
+    body.innerHTML = `<p>Save your bests and daily streak to an account, so they're there on any phone. Friends and match records are coming next.</p>
+      <p class="hint-line">No password: we email you a link, you tap it, you're in.</p>
+      <form class="acct-form" id="acct-form" novalidate>
+        <div class="field"><label for="acct-email">Email</label><input id="acct-email" type="email" autocomplete="email" inputmode="email" placeholder="you@example.com" required></div>
+        ${err}
+        <button class="btn primary" id="acct-send" ${acct.busy ? "disabled" : ""}>${acct.busy ? "Sending…" : "Email me a sign-in link"}</button>
+      </form>
+      <p class="hint-line">You can keep playing as a guest. We only use your email to sign you in.</p>`;
+    $("#acct-form").onsubmit = async e => {
+      e.preventDefault();
+      const email = $("#acct-email").value.trim();
+      if (!/^\S+@\S+\.\S+$/.test(email)) { acct.err = "That email doesn't look right."; renderAcct(); $("#acct-email").value = email; return; }
+      acct.busy = true; acct.err = ""; renderAcct();
+      const { error } = await acct.sb.auth.signInWithOtp({ email, options: { emailRedirectTo: location.origin + location.pathname } });
+      acct.busy = false;
+      if (error) acct.err = error.status === 429 ? "Too many sign-in emails just now. Try again in a little while." : "Couldn't send the email. Check it and try again.";
+      else acct.sent = email;
+      renderAcct();
+      if (error) $("#acct-email").value = email;
+    };
+    return;
+  }
+  // Signed in.
+  if (!acct.profile || acct.editName) {
+    const p = acct.profile, pick = acct.pickBadge || (p && p.badge) || BADGES[0];
+    body.innerHTML = `<p>${p ? "Pick a new username. You can change it once every 30 days." : "You're signed in. Pick a username: it's how friends will find you."}</p>
+      <form class="acct-form" id="name-form" novalidate>
+        <div class="field"><label for="acct-name">Username</label><input id="acct-name" autocomplete="username" autocapitalize="off" spellcheck="false" maxlength="15" value="${esc(acct.draftName || (p ? p.username : ""))}" placeholder="e.g. goalmachine9"></div>
+        <p class="hint-line" id="name-check" aria-live="polite">3 to 15 letters, numbers or _</p>
+        ${p ? "" : `<div class="fl">Your badge</div><div class="badges" role="radiogroup" aria-label="Badge">${BADGES.map(b => `<button type="button" role="radio" aria-checked="${b === pick}" data-badge="${b}">${b}</button>`).join("")}</div>`}
+        ${err}
+        <div class="actions">${p ? `<button type="button" class="btn" id="name-cancel">Cancel</button>` : ""}<button class="btn primary" ${acct.busy ? "disabled" : ""}>${acct.busy ? "Saving…" : p ? "Save username" : "Save and continue"}</button></div>
+      </form>`;
+    const inp = $("#acct-name"), chk = $("#name-check");
+    let t;
+    inp.oninput = () => {
+      acct.draftName = inp.value.trim(); clearTimeout(t);
+      const u = acct.draftName;
+      if (!nameRule(u)) { chk.textContent = "3 to 15 letters, numbers or _"; chk.className = "hint-line"; return; }
+      t = setTimeout(async () => {
+        const { data } = await acct.sb.from("profiles").select("id").ilike("username", u.replace(/_/g, "\\_")).limit(1);
+        if (inp.value.trim() !== u) return;
+        const taken = data && data.length && data[0].id !== acct.user.id;
+        chk.textContent = taken ? `${u} is taken` : `${u} is free`; chk.className = "hint-line " + (taken ? "bad" : "ok");
+      }, 350);
+    };
+    body.querySelectorAll("[data-badge]").forEach(b => b.onclick = () => { acct.pickBadge = b.dataset.badge; renderAcct(); });
+    if (p) $("#name-cancel").onclick = () => { acct.editName = false; acct.err = ""; acct.draftName = ""; renderAcct(); };
+    $("#name-form").onsubmit = async e => {
+      e.preventDefault();
+      const u = inp.value.trim();
+      if (!nameRule(u)) { acct.err = "Use 3 to 15 letters, numbers or _ (no spaces)."; renderAcct(); return; }
+      acct.busy = true; acct.err = ""; renderAcct();
+      const q = p ? acct.sb.from("profiles").update({ username: u }).eq("id", acct.user.id)
+        : acct.sb.from("profiles").insert({ id: acct.user.id, username: u, badge: pick });
+      const { error } = await q;
+      acct.busy = false;
+      if (error) acct.err = error.code === "23505" ? `${u} is taken. Try another.` : error.code === "P0001" ? error.message : "Couldn't save. Check your connection and try again.";
+      else {
+        acct.draftName = ""; acct.editName = false; acct.pickBadge = null;
+        await loadProfile();
+        if (!p) { await pullStats(); toast(`Welcome, ${u}! Your stats are saved`); }
+      }
+      renderAcct(); paintAcct();
+    };
+    if (!acct.busy) inp.focus({ preventScroll: true });
+    return;
+  }
+  const p = acct.profile, d = daily.log, sb = solo.best;
+  const row = (k, v) => `<div><span>${k}</span><b>${v}</b></div>`;
+  body.innerHTML = `<div class="me"><span class="bdg big">${esc(p.badge)}</span><div><b>${esc(p.username)}</b><span class="hint-line">${esc(acct.user.email || "")}</span></div></div>
+    <div class="fl">Your records ${acct.synced ? `<span class="ok">· saved to your account</span>` : ""}</div>
+    <div class="recs">
+      ${row("Best 3-round game", sb[3] ?? "–")}${row("Best 5-round game", sb[5] ?? "–")}${row("Best 10-round game", sb[10] ?? "–")}
+      ${row("Daily streak", dailyStreak())}${row("Longest daily streak", d.best || 0)}${row("Dailies played", d.played || 0)}
+      ${row("Higher or Lower best (easy)", hl.best.easy)}${row("Higher or Lower best (hard)", hl.best.hard)}
+    </div>
+    <p class="hint-line">Friends, head-to-head records and match history are coming next.</p>
+    <div class="fl">Badge</div>
+    <div class="badges" role="radiogroup" aria-label="Badge">${BADGES.map(b => `<button type="button" role="radio" aria-checked="${b === p.badge}" data-badge="${b}">${b}</button>`).join("")}</div>
+    ${err}
+    <div class="actions"><button class="btn" id="acct-rename">Change username</button><button class="btn" id="acct-out">Sign out</button></div>`;
+  body.querySelectorAll("[data-badge]").forEach(b => b.onclick = async () => {
+    const badge = b.dataset.badge, old = p.badge;
+    p.badge = badge; paintAcct();
+    const { error } = await acct.sb.from("profiles").update({ badge }).eq("id", acct.user.id);
+    if (error) { p.badge = old; acct.err = "Couldn't change your badge."; paintAcct(); }
+  });
+  $("#acct-rename").onclick = () => {
+    const next = new Date(new Date(p.username_changed_at).getTime() + 30 * 864e5);
+    if (next > new Date()) { acct.err = `You can change your username again on ${next.toLocaleDateString(undefined, { day: "numeric", month: "long" })}.`; renderAcct(); return; }
+    acct.err = ""; acct.editName = true; renderAcct();
+  };
+  $("#acct-out").onclick = async () => {
+    clearTimeout(acct.pushTimer); await pushStats();
+    await acct.sb.auth.signOut();
+    acct.err = ""; toast("Signed out. Your stats stay on this phone too");
+  };
+}
+function openAcct() {
+  acctReturn = document.activeElement; acctEl.hidden = false; renderAcct();
+  $(".sheet", acctEl).focus({ preventScroll: true });
+}
+function closeAcct() { acctEl.hidden = true; acct.err = ""; acctReturn && acctReturn.focus && acctReturn.focus(); }
+$("#open-acct").onclick = openAcct;
+$("#close-acct").onclick = closeAcct;
+acctEl.addEventListener("click", e => { if (e.target === acctEl) closeAcct(); });
+document.addEventListener("keydown", e => { if (e.key === "Escape" && !acctEl.hidden) closeAcct(); });
+document.addEventListener("click", e => { if (e.target.closest("#home-acct button")) openAcct(); });
+paintAcct();
+startAccounts();
+
 if (!ALL.length) view.innerHTML = `<section class="panel"><h2>Player list missing</h2><p class="hint-line">players.js didn't load, so there's nobody to pick.</p></section>`;
 else {
   const ch = readChallenge(), inv = readMatch(), tl = readTeamLink();
