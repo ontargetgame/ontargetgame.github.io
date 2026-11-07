@@ -278,7 +278,6 @@ small.by { color: var(--muted); font-weight: 500; font-size: .72rem; }
 .hlbtns .down { background: var(--red); color: #fff; }
 .hl-msg { text-align: center; font: 800 1.3rem/1.1 var(--display); text-transform: uppercase; margin: 0; min-height: 1.3em; }
 .hl-msg.pos { color: var(--good); } .hl-msg.neg { color: var(--red); }
-.trail { font-size: 1.1rem; letter-spacing: .1em; text-align: center; overflow-wrap: anywhere; margin: 0; }
 @media (min-width: 900px) { .wrap { max-width: 640px; } }
 @media (max-width: 380px) {
   .vs { grid-template-columns: 1fr; }
@@ -1410,16 +1409,19 @@ function renderDaily() {
 //  - difficulty is mixed every round (easy = one has 1.8x the other or more,
 //    medium = 1.35x to 1.8x, hard = within 1.35x), leaning harder as the streak grows;
 //  - "higher" and "lower" are each the answer half the time.
-// The difficulty is only shown after you answer, because "easy" would give it away.
 const HL_POOL = ALL.filter(p => p.a >= 100);
 const hlFame = p => p.a >= 300 || p.g >= 60 ? 1 : p.a >= 200 || p.g >= 25 ? .55 : .25;
 const HL_LEVELS = [
-  { key: "easy", dot: "🟢", lo: 1.8, hi: Infinity },
-  { key: "medium", dot: "🟡", lo: 1.35, hi: 1.8 },
-  { key: "hard", dot: "🔴", lo: 1.06, hi: 1.35 },
+  { key: "easy", lo: 1.8, hi: Infinity },
+  { key: "medium", lo: 1.35, hi: 1.8 },
+  { key: "hard", lo: 1.06, hi: 1.35 },
 ];
 const hlMix = s => s < 3 ? [.7, .25, .05] : s < 8 ? [.4, .4, .2] : s < 15 ? [.25, .4, .35] : [.15, .4, .45];
-const hl = { best: store.get("hlBest", 0), seen: store.get("hlSeen", []), run: null };
+// Easy shows each player's clubs and seasons; Hard shows clubs only (seasons come up
+// after you answer). Each has its own best streak. Old saves (a single number) were easy.
+const hlBestSaved = store.get("hlBest", 0);
+const hl = { best: typeof hlBestSaved === "number" ? { easy: hlBestSaved, hard: 0 } : hlBestSaved,
+  mode: store.get("hlMode", "easy"), seen: store.get("hlSeen", []), run: null };
 function hlPickWeighted(list, w) {
   let tot = 0; const ws = list.map(p => (tot += w(p)));
   const x = Math.random() * tot;
@@ -1456,7 +1458,7 @@ function hlRemember(ps) {
   store.set("hlSeen", hl.seen);
 }
 function hlStart() {
-  hl.run = { streak: 0, used: new Set(), trail: [], pair: null, answered: null, over: false };
+  hl.run = { hard: hl.mode === "hard", streak: 0, used: new Set(), pair: null, answered: null, over: false };
   hlNext();
 }
 function hlNext() {
@@ -1466,12 +1468,12 @@ function hlNext() {
   hlRemember([run.pair.a, run.pair.b]);
   renderHL();
 }
-const hlCard = (p, cls, val) => `<section class="hlc ${cls}">
-    <div><div class="hn">${esc(p.n)}</div><div class="hm">${esc(meta(p)) || "&nbsp;"}</div></div>
+const hlMeta = (p, years) => [p.gk ? "Goalkeeper" : "", p.c, years ? p.y : ""].filter(Boolean).join(" · ");
+const hlCard = (p, cls, val, years) => `<section class="hlc ${cls}">
+    <div><div class="hn">${esc(p.n)}</div><div class="hm">${esc(hlMeta(p, years)) || "&nbsp;"}</div></div>
     <div class="hv"><b${cls === "known" ? "" : ' id="hl-b"'}>${val}</b><span>PL apps</span></div></section>`;
 function hlShareText(run) {
-  return [`On Target · Higher or lower ↕️ Streak: ${run.streak}${run.streak >= 10 ? " 🔥" : ""}`,
-    run.trail.map(L => L.dot).join("") + "❌"].join("\n");
+  return [`On Target · Higher or lower (${run.hard ? "Hard" : "Easy"}) ↕️ Streak: ${run.streak}${run.streak >= 10 ? " 🔥" : ""}`].join("\n");
 }
 function renderHL() {
   const run = hl.run;
@@ -1479,26 +1481,32 @@ function renderHL() {
     view.innerHTML = `<section class="panel">
       <h2>Higher or lower</h2>
       <p class="hint-line" style="margin:0">You get one player's Premier League appearances. Has the next player made more or fewer? Keep going until you get one wrong. Your score is your streak.</p>
-      <p class="hint-line" style="margin:0">Everyone here has played 100+ PL games. It starts easier and gets closer as your streak grows.</p>
+      <p class="hint-line" style="margin:0">Everyone here has played 100+ PL games. The gaps get closer as your streak grows.</p>
+      <div class="field"><span class="fl">Difficulty</span>
+        <div class="seg" role="group" aria-label="Difficulty">
+          <button data-hlm="easy" aria-pressed="${hl.mode === "easy"}">Easy</button>
+          <button data-hlm="hard" aria-pressed="${hl.mode === "hard"}">Hard</button></div>
+        <span class="hint-line">${hl.mode === "hard" ? "Hard: clubs only. You see their seasons after you answer." : "Easy: you see each player's clubs and the seasons they played."}</span></div>
       <section class="stats three" aria-label="Your record">
-        <div class="stat"><b>${hl.best}</b><span>Best streak</span></div>
-        <div class="stat"><b>${HL_POOL.length.toLocaleString()}</b><span>Players</span></div>
-        <div class="stat"><b>3</b><span>Levels</span></div></section>
-      <button class="btn primary" id="hl-start">Play</button>
+        <div class="stat"><b>${hl.best.easy}</b><span>Best easy</span></div>
+        <div class="stat"><b>${hl.best.hard}</b><span>Best hard</span></div>
+        <div class="stat"><b>${HL_POOL.length.toLocaleString()}</b><span>Players</span></div></section>
+      <button class="btn primary" id="hl-start">Play ${hl.mode === "hard" ? "hard" : "easy"}</button>
     </section>`;
+    view.querySelectorAll("[data-hlm]").forEach(btn => btn.onclick = () => { hl.mode = btn.dataset.hlm; store.set("hlMode", hl.mode); renderHL(); });
     $("#hl-start").onclick = hlStart;
     return;
   }
-  const { a, b, level } = run.pair, ans = run.answered;
+  const { a, b } = run.pair, ans = run.answered;
   const right = ans && ans.right;
   view.innerHTML = `<div class="hl">
     <section class="stats three" aria-label="Your run">
       <div class="stat"><b>${run.streak}</b><span>Streak</span></div>
-      <div class="stat"><b>${Math.max(hl.best, run.streak)}</b><span>Best</span></div>
-      <div class="stat"><b>${ans ? level.key[0].toUpperCase() + level.key.slice(1) : "?"}</b><span>This pair</span></div></section>
-    ${hlCard(a, "known", a.a)}
+      <div class="stat"><b>${Math.max(hl.best[run.hard ? "hard" : "easy"], run.streak)}</b><span>Best ${run.hard ? "hard" : "easy"}</span></div>
+      <div class="stat"><b>${run.hard ? "Hard" : "Easy"}</b><span>Mode</span></div></section>
+    ${hlCard(a, "known", a.a, !run.hard || ans)}
     <span class="hlvs">VS</span>
-    ${hlCard(b, `ask${ans ? (right ? " right" : " wrong") : ""}`, "?")}
+    ${hlCard(b, `ask${ans ? (right ? " right" : " wrong") : ""}`, "?", !run.hard || ans)}
     ${ans ? `<p class="hl-msg ${right ? "pos" : "neg"}" aria-live="polite" id="hl-msg">&nbsp;</p>`
       : `<p class="hlq">Has <b>${esc(b.n)}</b> made more or fewer PL appearances than ${esc(a.n)}?</p>
     <div class="hlbtns"><button class="btn up" id="hl-up">▲ Higher</button><button class="btn down" id="hl-down">▼ Lower</button></div>`}
@@ -1523,13 +1531,14 @@ function renderHL() {
   requestAnimationFrame(tick);
 }
 function hlAnswer(up) {
-  const run = hl.run, { a, b, level } = run.pair;
+  const run = hl.run, { a, b } = run.pair;
   const right = up === (b.a > a.a);
   run.answered = { up, right };
-  if (right) { run.streak++; run.trail.push(level); }
+  if (right) run.streak++;
   else {
     run.over = true;
-    if (run.streak > hl.best) { run.newBest = hl.best > 0; hl.best = run.streak; store.set("hlBest", hl.best); }
+    const k = run.hard ? "hard" : "easy";
+    if (run.streak > hl.best[k]) { run.newBest = hl.best[k] > 0; hl.best[k] = run.streak; store.set("hlBest", hl.best); }
   }
   renderHL();
 }
@@ -1537,8 +1546,6 @@ function renderHLEnd() {
   const run = hl.run, text = hlShareText(run);
   $("#hl-end").innerHTML = `<section class="panel">
     <h2>${run.newBest ? "New best streak" : run.streak === 0 ? "Out first time" : `Streak of ${run.streak}`}</h2>
-    ${run.trail.length ? `<p class="trail" aria-label="Pairs you got right, by difficulty">${run.trail.map(L => L.dot).join("")}❌</p>
-    <p class="hint-line" style="margin:0;text-align:center">🟢 easy · 🟡 medium · 🔴 hard</p>` : ""}
     <pre class="share" id="share-text" hidden>${esc(text)}</pre>
     <div class="actions"><button class="btn go" id="hl-again">Play again</button><button class="btn" id="hl-share">Share</button></div>
   </section>`;
@@ -1565,7 +1572,7 @@ function renderHome() {
     <button class="tile t-hl" id="tile-hl">
       <div><h3>Higher or Lower</h3><p>Who has made more Premier League appearances? Keep your streak going.</p></div>
       <div class="tv"><small>PL apps</small>↑↓</div>
-      <div class="tags"><span>🔥 Best streak: ${hl.best}</span></div>
+      <div class="tags"><span>🔥 Best: ${hl.best.easy} easy · ${hl.best.hard} hard</span></div>
       <span class="play">Play Higher or Lower</span>
     </button>
   </div>`;
