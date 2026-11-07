@@ -286,7 +286,6 @@ small.by { color: var(--muted); font-weight: 500; font-size: .72rem; }
 .hlbtns .down { background: var(--red); color: #fff; }
 .hl-msg { text-align: center; font: 800 1.3rem/1.1 var(--display); text-transform: uppercase; margin: 0; min-height: 1.3em; }
 .hl-msg.pos { color: var(--good); } .hl-msg.neg { color: var(--red); }
-.trail { font-size: 1.1rem; letter-spacing: .1em; text-align: center; overflow-wrap: anywhere; margin: 0; }
 @media (min-width: 900px) { .wrap { max-width: 640px; } }
 @media (max-width: 380px) {
   .vs { grid-template-columns: 1fr; }
@@ -1418,13 +1417,12 @@ function renderDaily() {
 //  - difficulty is mixed every round (easy = one has 1.8x the other or more,
 //    medium = 1.35x to 1.8x, hard = within 1.35x), leaning harder as the streak grows;
 //  - "higher" and "lower" are each the answer half the time.
-// The difficulty is only shown after you answer, because "easy" would give it away.
 const HL_POOL = ALL.filter(p => p.a >= 100);
 const hlFame = p => p.a >= 300 || p.g >= 60 ? 1 : p.a >= 200 || p.g >= 25 ? .55 : .25;
 const HL_LEVELS = [
-  { key: "easy", name: "Clear", dot: "🟢", lo: 1.8, hi: Infinity },
-  { key: "medium", name: "Close", dot: "🟡", lo: 1.35, hi: 1.8 },
-  { key: "hard", name: "Tight", dot: "🔴", lo: 1.06, hi: 1.35 },
+  { key: "easy", lo: 1.8, hi: Infinity },
+  { key: "medium", lo: 1.35, hi: 1.8 },
+  { key: "hard", lo: 1.06, hi: 1.35 },
 ];
 const hlMix = s => s < 3 ? [.7, .25, .05] : s < 8 ? [.4, .4, .2] : s < 15 ? [.25, .4, .35] : [.15, .4, .45];
 // Easy shows each player's clubs and seasons; Hard shows clubs only (seasons come up
@@ -1468,7 +1466,7 @@ function hlRemember(ps) {
   store.set("hlSeen", hl.seen);
 }
 function hlStart() {
-  hl.run = { hard: hl.mode === "hard", streak: 0, used: new Set(), trail: [], pair: null, answered: null, over: false };
+  hl.run = { hard: hl.mode === "hard", streak: 0, used: new Set(), pair: null, answered: null, over: false };
   hlNext();
 }
 function hlNext() {
@@ -1483,8 +1481,7 @@ const hlCard = (p, cls, val, years) => `<section class="hlc ${cls}">
     <div><div class="hn">${esc(p.n)}</div><div class="hm">${esc(hlMeta(p, years)) || "&nbsp;"}</div></div>
     <div class="hv"><b${cls === "known" ? "" : ' id="hl-b"'}>${val}</b><span>PL apps</span></div></section>`;
 function hlShareText(run) {
-  return [`On Target · Higher or lower (${run.hard ? "Hard" : "Easy"}) ↕️ Streak: ${run.streak}${run.streak >= 10 ? " 🔥" : ""}`,
-    run.trail.map(L => L.dot).join("") + "❌"].join("\n");
+  return [`On Target · Higher or lower (${run.hard ? "Hard" : "Easy"}) ↕️ Streak: ${run.streak}${run.streak >= 10 ? " 🔥" : ""}`].join("\n");
 }
 function renderHL() {
   const run = hl.run;
@@ -1508,13 +1505,13 @@ function renderHL() {
     $("#hl-start").onclick = hlStart;
     return;
   }
-  const { a, b, level } = run.pair, ans = run.answered;
+  const { a, b } = run.pair, ans = run.answered;
   const right = ans && ans.right;
   view.innerHTML = `<div class="hl">
     <section class="stats three" aria-label="Your run">
       <div class="stat"><b>${run.streak}</b><span>Streak</span></div>
       <div class="stat"><b>${Math.max(hl.best[run.hard ? "hard" : "easy"], run.streak)}</b><span>Best ${run.hard ? "hard" : "easy"}</span></div>
-      <div class="stat"><b>${ans ? level.name : "?"}</b><span>This pair</span></div></section>
+      <div class="stat"><b>${run.hard ? "Hard" : "Easy"}</b><span>Mode</span></div></section>
     ${hlCard(a, "known", a.a, !run.hard || ans)}
     <span class="hlvs">VS</span>
     ${hlCard(b, `ask${ans ? (right ? " right" : " wrong") : ""}`, "?", !run.hard || ans)}
@@ -1542,10 +1539,10 @@ function renderHL() {
   requestAnimationFrame(tick);
 }
 function hlAnswer(up) {
-  const run = hl.run, { a, b, level } = run.pair;
+  const run = hl.run, { a, b } = run.pair;
   const right = up === (b.a > a.a);
   run.answered = { up, right };
-  if (right) { run.streak++; run.trail.push(level); }
+  if (right) run.streak++;
   else {
     run.over = true;
     const k = run.hard ? "hard" : "easy";
@@ -1557,8 +1554,6 @@ function renderHLEnd() {
   const run = hl.run, text = hlShareText(run);
   $("#hl-end").innerHTML = `<section class="panel">
     <h2>${run.newBest ? "New best streak" : run.streak === 0 ? "Out first time" : `Streak of ${run.streak}`}</h2>
-    ${run.trail.length ? `<p class="trail" aria-label="Pairs you got right, by difficulty">${run.trail.map(L => L.dot).join("")}❌</p>
-    <p class="hint-line" style="margin:0;text-align:center">🟢 clear gap · 🟡 close · 🔴 tight</p>` : ""}
     <pre class="share" id="share-text" hidden>${esc(text)}</pre>
     <div class="actions"><button class="btn go" id="hl-again">Play again</button><button class="btn" id="hl-share">Share</button></div>
   </section>`;
