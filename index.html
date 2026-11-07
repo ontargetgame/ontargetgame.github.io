@@ -312,6 +312,11 @@ small.by { color: var(--muted); font-weight: 500; font-size: .72rem; }
 .hlc.ask .hv b { color: var(--muted); }
 .hlc.ask.right .hv b { color: var(--good); } .hlc.ask.wrong .hv b { color: var(--red); }
 .hlq { text-align: center; font-weight: 600; margin: 0; }
+.clock { display: flex; align-items: center; gap: 10px; }
+.clock i { flex: 1; height: 8px; border-radius: 999px; background: var(--chip); overflow: hidden; }
+.clock i b { display: block; height: 100%; width: 100%; background: var(--board-text); transform-origin: left; }
+.clock span { font: 800 1.15rem/1 var(--display); min-width: 2.6em; text-align: right; font-variant-numeric: tabular-nums; }
+.clock.low i b { background: var(--red); } .clock.low span { color: var(--red); }
 .hlvs { align-self: center; font: 900 1rem/1 var(--display); color: var(--muted); letter-spacing: .1em; margin: -4px 0; }
 .hlbtns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .hlbtns .btn { font-size: 1.1rem; padding: 16px 10px; }
@@ -342,6 +347,25 @@ small.by { color: var(--muted); font-weight: 500; font-size: .72rem; }
 .recs { display: grid; gap: 1px; background: var(--line); border-radius: 12px; overflow: hidden; border: 1px solid var(--line); }
 .recs div { display: flex; justify-content: space-between; gap: 10px; padding: 9px 12px; background: var(--surface); font-size: .92rem; }
 .recs b { font-variant-numeric: tabular-nums; }
+.lb-btn { width: 100%; font-size: 1.05rem; padding: 15px; background: var(--surface); border: 1.5px solid var(--line); color: var(--ink); }
+.lb .seg { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); width: 100%; }
+.lb .seg button { text-align: center; padding: 6px 4px; }
+.lb .lb-name { font: 800 1.15rem/1.1 var(--display); text-transform: uppercase; margin: 0 0 4px; }
+.lb-rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.lb-rows li { display: grid; grid-template-columns: 2.2em minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 9px 10px; border-radius: 10px; background: var(--bg); }
+.lb-rows li.top .lb-rank { color: var(--gold); }
+.lb-rows li.me { background: var(--chip); box-shadow: inset 0 0 0 2px var(--board-text); }
+.lb-rows li.lb-gap { display: block; text-align: center; background: none; padding: 0; color: var(--muted); }
+.lb-rank { font: 900 1.2rem/1 var(--display); text-align: center; font-variant-numeric: tabular-nums; }
+.lb-who { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.lb-who b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lb-who em { font-style: normal; font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--board-text); }
+.lb-score { text-align: right; }
+.lb-score b { font: 900 1.3rem/1 var(--display); font-variant-numeric: tabular-nums; }
+.lb-score small { display: block; font-size: .68rem; color: var(--muted); }
+.lb-empty { text-align: center; color: var(--muted); margin: 8px 0; }
+.lb-join { display: flex; flex-direction: column; gap: 8px; align-items: stretch; text-align: center; border-top: 1px solid var(--line); padding-top: 12px; }
+.lb-join p { margin: 0; }
 .home-acct { text-align: center; margin: 4px 0 0; color: var(--muted); font-size: .9rem; }
 .home-acct .linkish { color: var(--ink); font-weight: 700; }
 @media (min-width: 900px) { .wrap { max-width: 640px; } }
@@ -393,7 +417,7 @@ small.by { color: var(--muted); font-weight: 500; font-size: .72rem; }
       <article class="ovc t-hl">
         <div class="ovh"><h3>Higher or Lower</h3><span class="ovv">↑↓</span></div>
         <p>You see one player's career PL appearances. Has the next player made more or fewer?</p>
-        <ul><li>Right answer: a new pair comes up</li><li>One wrong answer ends the run, and your streak is your score</li><li>Easy shows clubs and seasons, Hard shows clubs only</li></ul>
+        <ul><li>Right answer: a new pair comes up</li><li>10 seconds to answer each one</li><li>One wrong answer or running out of time ends the run, and your streak is your score</li><li>Easy shows clubs and seasons, Hard shows clubs only</li></ul>
         <button class="btn" data-deck="slides-hl">Full rules</button>
       </article>
       <button class="btn primary" id="rules-done">Let's play</button>
@@ -454,7 +478,7 @@ small.by { color: var(--muted); font-weight: 500; font-size: .72rem; }
           <p class="hl-msg pos">Correct · 105 fewer</p>
           <div class="sum">🔥 Streak <b>1</b></div></div></div>
         <h3>Keep the streak going</h3>
-        <p>Get it right and a new pair comes up. One wrong answer ends the run, and your score is your streak.</p>
+        <p>You have 10 seconds to answer. Get it right and a new pair comes up. A wrong answer or running out of time ends the run, and your score is your streak.</p>
       </section>
       <section class="slide" aria-label="3 of 3">
         <div class="vis"><div class="modes">
@@ -623,6 +647,26 @@ let toastTimer;
 function toast(msg) {
   const t = $("#toast"); t.textContent = msg; t.hidden = false;
   clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, 1800);
+}
+// Answer clock. Runs off a fixed deadline, so leaving the page to look something up
+// doesn't pause it. Only one clock runs at a time; drawing a new screen replaces it.
+const HL_SECS = 10;
+let clockId = null;
+function stopClock() { clearInterval(clockId); clockId = null; }
+function startClock(el, deadline, secs, onEnd) {
+  stopClock();
+  el.innerHTML = `<i role="progressbar" aria-label="Time left" aria-valuemin="0" aria-valuemax="${secs}"><b></b></i><span></span>`;
+  const bar = el.querySelector("b"), lab = el.querySelector("span"), pb = el.querySelector("i");
+  const draw = () => {
+    const left = Math.max(0, deadline - Date.now()), s = Math.ceil(left / 1000);
+    bar.style.transform = `scaleX(${left / (secs * 1000)})`;
+    lab.textContent = s + "s"; pb.setAttribute("aria-valuenow", s);
+    el.classList.toggle("low", left <= Math.min(5, secs / 4) * 1000);
+    if (!el.isConnected) return stopClock();
+    if (left <= 0) { stopClock(); onEnd(); }
+  };
+  draw();
+  if (deadline > Date.now()) clockId = setInterval(draw, 100);
 }
 async function copy(text, pre) {
   try { await navigator.clipboard.writeText(text); toast("Copied. Paste it to your friends"); }
@@ -856,6 +900,7 @@ function soloNext(g) {
   g.over = true;
   if (g.daily) dailySave(g);
   if (!g.online && !g.daily && (solo.best[g.n] == null || g.points > solo.best[g.n])) { g.newBest = solo.best[g.n] != null; solo.best[g.n] = g.points; store.set("bestGame", solo.best); }
+  if (!g.online && !g.daily && !g.challenge && g.n === 5) submitScore("solo5", g.points, null, { r: g.targets });
   renderSolo(g); window.scrollTo({ top: 0 });
 }
 
@@ -866,7 +911,7 @@ function renderSoloSetup() {
     <p class="hint-line" style="margin:0">Land as close as you can to each target. Your score is your total over the game, and you can send a friend the same targets to beat it.</p>
     <div class="field"><span class="fl">Rounds</span>
       <div class="seg" role="group" aria-label="Number of rounds">
-        ${[3, 5, 10].map(n => `<button data-n="${n}" aria-pressed="${st.rounds === n}">${n} rounds</button>`).join("")}</div></div>
+        ${[3, 5, 10].map(n => `<button data-n="${n}" aria-pressed="${st.rounds === n}">${n} rounds</button>`).join("")}</div><span class="hint-line">${st.rounds === 5 ? "5-round games count for the leaderboard." : "Only 5-round games go on the leaderboard."}</span></div>
     <div class="field"><span class="fl">Players</span>${repeatToggle(!!st.noRepeat, "sr")}
       <span class="hint-line">${st.noRepeat ? "Hard: each player can only be used once per game." : "Pick anyone, any round."}</span></div>
     ${Object.keys(solo.best).length ? `<p class="hint-line" style="margin:0">Your best: ${[3, 5, 10].filter(n => solo.best[n] != null).map(n => `${num(solo.best[n])} over ${n} rounds`).join(" · ")}</p>` : ""}
@@ -896,16 +941,17 @@ function renderSoloSummary() {
     ${vsFriend ? `<p class="round-msg">${vsFriend}</p>` : ""}
     <section class="panel"><h2>Round by round</h2>
       <p class="hint-line" style="margin:0">Tap a round to see the picks.</p>
-      <ol class="rounds">${g.rounds.map((r, k) => roundCard(k, r.target, r.res.skipped ? "Skipped" : r.res.label,
+      <ol class="rounds">${g.rounds.map((r, k) => roundCard(k, r.target, r.res.label,
         `<span class="${tone(r.res.pts)}">${signed(r.res.pts)} pts</span>`, playerRow("You", r.res, r.picks))).join("")}</ol>
       <pre class="share" id="share-text" hidden>${esc(share)}</pre>
       <div class="actions"><button class="btn primary" id="challenge">Copy challenge link</button><button class="btn" id="share">Copy breakdown</button></div>
       <p class="hint-line" style="margin:0">The challenge link gives a friend these same ${g.n} targets and your score to beat, without showing your players.</p>
-      <div class="actions"><button class="btn go" id="again">Play again</button><button class="btn ghost" id="settings">Change rounds</button></div>
+      <div class="actions"><button class="btn go" id="again">Play again</button>${g.n === 5 && !g.challenge ? `<button class="btn" id="to-lb">🏆 Leaderboard</button>` : ""}<button class="btn ghost" id="settings">Change rounds</button></div>
     </section></div>`;
   $("#share").onclick = () => copy(share, $("#share-text"));
   $("#challenge").onclick = () => copy(challenge, $("#share-text"));
   $("#again").onclick = () => { solo.game = null; soloStart(); window.scrollTo({ top: 0 }); };
+  if ($("#to-lb")) $("#to-lb").onclick = () => openLB("solo5");
   $("#settings").onclick = () => { solo.game = null; renderSoloSetup(); };
 }
 
@@ -1459,6 +1505,7 @@ function dailySave(g) {
   const keys = Object.keys(L.days).sort();  // keep the last 60 days
   keys.slice(0, -60).forEach(k => delete L.days[k]);
   store.set("daily", L);
+  submitScore("daily", g.points, key, { r: g.targets });
 }
 // Rebuild a finished daily from storage so it shows after a reload.
 function dailyFromLog(key) {
@@ -1488,14 +1535,14 @@ function renderDailyEnd(g) {
       <div class="stat"><b>${L.played}</b><span>Played</span></div></section>
     <section class="panel"><h2>Round by round</h2>
       <p class="hint-line" style="margin:0">Tap a round to see the picks.</p>
-      <ol class="rounds">${g.rounds.map((r, k) => roundCard(k, r.target, r.res.skipped ? "Skipped" : r.res.label,
+      <ol class="rounds">${g.rounds.map((r, k) => roundCard(k, r.target, r.res.label,
         `<span class="${tone(r.res.pts)}">${signed(r.res.pts)} pts</span>`, playerRow("You", r.res, r.picks))).join("")}</ol>
       <pre class="share" id="share-text" hidden>${esc(text)}</pre>
-      <div class="actions"><button class="btn primary" id="share">Share my score</button><button class="btn ghost" id="to-solo">Play solo</button></div>
+      <div class="actions"><button class="btn primary" id="share">Share my score</button><button class="btn" id="to-lb">🏆 Leaderboard</button></div>
       <p class="hint-line" style="margin:0">Your share doesn't show your players, so it won't spoil today's targets for anyone.</p>
     </section></div>`;
   $("#share").onclick = () => send(text, shareBase());
-  $("#to-solo").onclick = () => setMode("solo");
+  $("#to-lb").onclick = () => openLB("daily");
 }
 function renderDaily() {
   const key = dayKey();
@@ -1581,7 +1628,7 @@ function hlStart() {
 }
 function hlNext() {
   const run = hl.run;
-  run.pair = hlPair(run); run.answered = null;
+  run.pair = hlPair(run); run.answered = null; run.deadline = Date.now() + HL_SECS * 1000;
   run.used.add(run.pair.a.id); run.used.add(run.pair.b.id);
   hlRemember([run.pair.a, run.pair.b]);
   renderHL();
@@ -1598,7 +1645,7 @@ function renderHL() {
   if (!run) {
     view.innerHTML = `<section class="panel">
       <h2>Higher or lower</h2>
-      <p class="hint-line" style="margin:0">You get one player's Premier League appearances. Has the next player made more or fewer? Keep going until you get one wrong. Your score is your streak.</p>
+      <p class="hint-line" style="margin:0">You get one player's Premier League appearances. Has the next player made more or fewer? You have 10 seconds for each one. Keep going until you get one wrong or run out of time. Your score is your streak.</p>
       <p class="hint-line" style="margin:0">Everyone here has played 100+ PL games. The gaps get closer as your streak grows.</p>
       <div class="field"><span class="fl">Difficulty</span>
         <div class="seg" role="group" aria-label="Difficulty">
@@ -1626,13 +1673,14 @@ function renderHL() {
     <span class="hlvs">VS</span>
     ${hlCard(b, `ask${ans ? (right ? " right" : " wrong") : ""}`, "?", !run.hard || ans)}
     ${ans ? `<p class="hl-msg ${right ? "pos" : "neg"}" aria-live="polite" id="hl-msg">&nbsp;</p>`
-      : `<p class="hlq">Has <b>${esc(b.n)}</b> made more or fewer PL appearances than ${esc(a.n)}?</p>
+      : `<div class="clock" id="clock"></div><p class="hlq">Has <b>${esc(b.n)}</b> made more or fewer PL appearances than ${esc(a.n)}?</p>
     <div class="hlbtns"><button class="btn up" id="hl-up">▲ Higher</button><button class="btn down" id="hl-down">▼ Lower</button></div>`}
     <div id="hl-end"></div>
   </div>`;
   if (!ans) {
-    $("#hl-up").onclick = () => hlAnswer(true);
-    $("#hl-down").onclick = () => hlAnswer(false);
+    $("#hl-up").onclick = () => { stopClock(); hlAnswer(true); };
+    $("#hl-down").onclick = () => { stopClock(); hlAnswer(false); };
+    startClock($("#clock"), run.deadline, HL_SECS, () => { if (hl.run === run && !run.answered && mode === "hl") hlAnswer(null); });
     return;
   }
   // after an answer: count B up, then move on or end the run
@@ -1642,7 +1690,7 @@ function renderHL() {
     const k = dur ? Math.min(1, (now - t0) / dur) : 1;
     el.textContent = Math.round(b.a * (1 - (1 - k) ** 3));
     if (k < 1) return requestAnimationFrame(tick);
-    msg.textContent = right ? `Correct · ${diff} ${b.a > a.a ? "more" : "fewer"}` : `Wrong · ${diff} ${b.a > a.a ? "more" : "fewer"}`;
+    msg.textContent = right ? `Correct · ${diff} ${b.a > a.a ? "more" : "fewer"}` : ans.late ? `Time's up · ${diff} ${b.a > a.a ? "more" : "fewer"}` : `Wrong · ${diff} ${b.a > a.a ? "more" : "fewer"}`;
     if (right) { const r = run; setTimeout(() => { if (hl.run === r && mode === "hl") hlNext(); }, reduced() ? 600 : 1100); }
     else renderHLEnd();
   };
@@ -1650,13 +1698,14 @@ function renderHL() {
 }
 function hlAnswer(up) {
   const run = hl.run, { a, b } = run.pair;
-  const right = up === (b.a > a.a);
-  run.answered = { up, right };
+  const right = up !== null && up === (b.a > a.a);
+  run.answered = { up, right, late: up === null };
   if (right) run.streak++;
   else {
     run.over = true;
     const k = run.hard ? "hard" : "easy";
     if (run.streak > hl.best[k]) { run.newBest = hl.best[k] > 0; hl.best[k] = run.streak; store.set("hlBest", hl.best); }
+    if (run.streak > 0) submitScore("hl_" + k, run.streak);
   }
   renderHL();
 }
@@ -1665,10 +1714,11 @@ function renderHLEnd() {
   $("#hl-end").innerHTML = `<section class="panel">
     <h2>${run.newBest ? "New best streak" : run.streak === 0 ? "Out first time" : `Streak of ${run.streak}`}</h2>
     <pre class="share" id="share-text" hidden>${esc(text)}</pre>
-    <div class="actions"><button class="btn go" id="hl-again">Play again</button><button class="btn" id="hl-share">Share</button></div>
+    <div class="actions"><button class="btn go" id="hl-again">Play again</button><button class="btn" id="hl-share">Share</button><button class="btn" id="hl-lb">🏆 Leaderboard</button></div>
   </section>`;
   $("#hl-again").onclick = () => { hlStart(); window.scrollTo({ top: 0 }); };
   $("#hl-share").onclick = () => send(text, shareBase());
+  $("#hl-lb").onclick = () => openLB(run.hard ? "hl_hard" : "hl_easy");
   $("#hl-again").focus({ preventScroll: true });
 }
 
@@ -1693,10 +1743,12 @@ function renderHome() {
       <div class="tags"><span>🔥 Best: ${hl.best.easy} easy · ${hl.best.hard} hard</span></div>
       <span class="play">Play Higher or Lower</span>
     </button>
+    <button class="btn lb-btn" id="go-lb">🏆 Leaderboards</button>
     <p class="home-acct" id="home-acct" ${acct.user ? "hidden" : ""}><button class="linkish">Sign in</button> to save your stats on any phone</p>
   </div>`;
   $("#tile-ot").onclick = () => setMode(store.get("otMode", "solo"));
   $("#tile-hl").onclick = () => setMode("hl");
+  $("#go-lb").onclick = () => openLB();
 }
 // What "End game" ends in each mode; null when nothing is in progress.
 function activeGame() {
@@ -1716,8 +1768,9 @@ function syncChrome() {
   $("#end-game").hidden = !activeGame();
   const home = mode === "home";
   $("#gamebar").hidden = home;
-  $("#ot-modes").hidden = mode === "hl";
-  $("#hl-name").hidden = mode !== "hl";
+  $("#ot-modes").hidden = mode === "hl" || mode === "lb";
+  $("#hl-name").hidden = mode !== "hl" && mode !== "lb";
+  $("#hl-name").textContent = mode === "lb" ? "Leaderboards" : "Higher or lower";
 }
 function setMode(mo) {
   mode = mo; store.set("mode", mo);
@@ -1730,6 +1783,7 @@ function setMode(mo) {
   if (mo === "home") renderHome();
   else if (mo === "daily") renderDaily();
   else if (mo === "hl") renderHL();
+  else if (mo === "lb") renderLB();
   else if (mo === "solo") renderSolo();
   else if (h2h.online) renderSolo(h2h.online);
   else if (h2h.invite) renderInvite(h2h.invite);
@@ -1855,11 +1909,12 @@ async function onSession(session, event) {
   const user = session && session.user;
   if ((user && user.id) === (acct.user && acct.user.id)) return;
   acct.user = user || null; acct.profile = null; acct.synced = false;
-  if (!user) { acct.state = "out"; paintAcct(); return; }
+  if (!user) { acct.state = "out"; paintAcct(); if (mode === "lb") renderLB(); return; }
   acct.state = "in";
   await loadProfile();
-  if (acct.profile) await pullStats();
+  if (acct.profile) { await pullStats(); submitTodaysDaily(); }
   paintAcct();
+  if (mode === "lb") renderLB();
   // Just back from the email link with no username yet: ask for one straight away.
   if (location.hash === "#") history.replaceState(null, "", location.pathname);
   if (acct.fromLink && !acct.profile && acctEl.hidden) openAcct();
@@ -1875,6 +1930,7 @@ function startAccounts() {
       acct.sb = window.supabase.createClient(SB_URL, SB_KEY, { auth: { flowType: "implicit", detectSessionInUrl: true, persistSession: true, autoRefreshToken: true } });
     } catch { acct.state = "off"; paintAcct(); return; }
     // Supabase calls this inside its own lock, so the follow-up requests run just after.
+    if (mode === "lb") renderLB();
     acct.sb.auth.onAuthStateChange((event, session) => { setTimeout(() => onSession(session, event), 0); });
     acct.sb.auth.getSession().then(({ data }) => { if (!data.session && acct.state === "loading") { acct.state = "out"; paintAcct(); } });
   };
@@ -1974,7 +2030,7 @@ function renderAcct() {
       else {
         acct.draftName = ""; acct.editName = false; acct.pickBadge = null;
         await loadProfile();
-        if (!p) { await pullStats(); toast(`Welcome, ${u}! Your stats are saved`); }
+        if (!p) { await pullStats(); submitTodaysDaily(); toast(`Welcome, ${u}! Your stats are saved`); if (mode === "lb") renderLB(); }
       }
       renderAcct(); paintAcct();
     };
@@ -2024,6 +2080,73 @@ document.addEventListener("keydown", e => { if (e.key === "Escape" && !acctEl.hi
 document.addEventListener("click", e => { if (e.target.closest("#home-acct button")) openAcct(); });
 paintAcct();
 startAccounts();
+
+// ---------------------------------------------------------------- leaderboards
+// Four boards, each with Today and All-time. Scores go up only for signed-in players;
+// anyone can look. "Today" is UK time, except the daily challenge, which goes by its number.
+const LB_GAMES = [
+  { id: "daily", tab: "Daily", name: "Hit the Target · Daily challenge",
+    today: () => `Today's daily (#${dayNo(dayKey())}). One go each, same targets for everyone.`, all: "Every daily score added up, so playing every day counts." },
+  { id: "solo5", tab: "Solo", name: "Hit the Target · Solo, 5 rounds",
+    today: () => "Best 5-round solo game today. Games from challenge links don't count.", all: "Best 5-round solo game ever." },
+  { id: "hl_easy", tab: "H/L Easy", name: "Higher or Lower · Easy",
+    today: () => "Best streak today.", all: "Best streak ever." },
+  { id: "hl_hard", tab: "H/L Hard", name: "Higher or Lower · Hard",
+    today: () => "Best streak today.", all: "Best streak ever." },
+];
+const lb = { ...{ game: "daily", period: "today" }, ...store.get("lb", {}), rows: null, err: "", seq: 0 };
+
+function submitScore(game, score, day, detail) {
+  if (!acct.profile || !acct.sb) return;
+  acct.sb.rpc("submit_score", { p_game: game, p_score: score, p_day: day || null, p_detail: detail || {} }).then(() => {}, () => {});
+}
+// After signing in, today's daily (if already played as a guest) goes on the board too.
+function submitTodaysDaily() {
+  const k = dayKey(), d = daily.log.days[k];
+  if (d) submitScore("daily", d.pts, k, { r: d.r.map(x => x[0]) });
+}
+function openLB(game) {
+  if (game) { lb.game = game; store.set("lb", { game: lb.game, period: lb.period }); }
+  setMode("lb"); window.scrollTo({ top: 0 });
+}
+async function loadLB() {
+  if (!acct.sb) return;
+  const seq = ++lb.seq;
+  lb.rows = null; lb.err = "";
+  const { data, error } = await acct.sb.rpc("leaderboard", { p_game: lb.game, p_period: lb.period, p_day: lb.game === "daily" && lb.period === "today" ? dayKey() : null });
+  if (seq !== lb.seq) return;
+  lb.rows = error ? [] : data; lb.err = error ? "Couldn't load the leaderboard. Check your connection." : "";
+  if (mode === "lb") paintLBList();
+}
+function renderLB() {
+  const G = LB_GAMES.find(x => x.id === lb.game) || LB_GAMES[0];
+  view.innerHTML = `<section class="panel lb">
+    <h2>🏆 Leaderboards</h2>
+    <div class="seg lb-games" role="group" aria-label="Game">${LB_GAMES.map(x => `<button data-lbg="${x.id}" aria-pressed="${x.id === G.id}">${x.tab}</button>`).join("")}</div>
+    <div class="seg" role="group" aria-label="Period"><button data-lbp="today" aria-pressed="${lb.period === "today"}">Today</button><button data-lbp="all" aria-pressed="${lb.period === "all"}">All-time</button></div>
+    <div><h3 class="lb-name">${esc(G.name)}</h3><p class="hint-line">${esc(lb.period === "today" ? G.today() : G.all)}</p></div>
+    <div id="lb-list" aria-live="polite"></div>
+    ${acct.profile ? "" : `<div class="lb-join"><p>${acct.state === "off" ? "Leaderboards need a connection to load." : "Sign in to get your scores on the leaderboard."}</p>${acct.state === "off" ? "" : `<button class="btn primary" id="lb-signin">Sign in</button>`}</div>`}
+  </section>`;
+  view.querySelectorAll("[data-lbg]").forEach(b => b.onclick = () => { lb.game = b.dataset.lbg; store.set("lb", { game: lb.game, period: lb.period }); renderLB(); });
+  view.querySelectorAll("[data-lbp]").forEach(b => b.onclick = () => { lb.period = b.dataset.lbp; store.set("lb", { game: lb.game, period: lb.period }); renderLB(); });
+  const si = $("#lb-signin"); if (si) si.onclick = openAcct;
+  paintLBList(); loadLB();
+}
+function paintLBList() {
+  const el = $("#lb-list"); if (!el) return;
+  if (acct.state === "off") { el.innerHTML = ""; return; }
+  if (!lb.rows) { el.innerHTML = `<p class="hint-line">Loading…</p>`; return; }
+  if (lb.err) { el.innerHTML = `<p class="acct-err">${esc(lb.err)}</p>`; return; }
+  if (!lb.rows.length) { el.innerHTML = `<p class="lb-empty">Nobody's on this board yet. ${acct.profile ? "Play a game to be first!" : "Sign in and play to be first!"}</p>`; return; }
+  const unit = lb.game.startsWith("hl") ? "streak" : "pts";
+  let prev = 0;
+  el.innerHTML = `<ol class="lb-rows">${lb.rows.map(r => {
+    const gap = r.rank > prev + 1 && prev ? `<li class="lb-gap" aria-hidden="true">⋯</li>` : ""; prev = Number(r.rank);
+    const sub = lb.game === "daily" && lb.period === "all" ? `<small>${r.games} day${r.games == 1 ? "" : "s"}</small>` : "";
+    return `${gap}<li class="${r.is_me ? "me" : ""}${r.rank <= 3 ? " top" : ""}"><span class="lb-rank">${r.rank}</span><span class="lb-who"><span class="bdg">${esc(r.badge)}</span><b>${esc(r.username)}</b>${r.is_me ? `<em>you</em>` : ""}</span><span class="lb-score"><b>${num(Number(r.score))}</b>${sub || `<small>${unit}</small>`}</span></li>`;
+  }).join("")}</ol>`;
+}
 
 if (!ALL.length) view.innerHTML = `<section class="panel"><h2>Player list missing</h2><p class="hint-line">players.js didn't load, so there's nobody to pick.</p></section>`;
 else {
