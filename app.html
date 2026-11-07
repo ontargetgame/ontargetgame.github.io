@@ -1314,7 +1314,7 @@ function renderLinkedInvite() {
     <pre class="share" id="share-text" hidden></pre>
     <button class="btn go" id="ready">We're ready, start</button>
   </section>`;
-  $("#invite").onclick = () => send(`${L.teams[0]} vs ${L.teams[1]} on On Target 🎯 Open this on your team's phone:`, link);
+  $("#invite").onclick = () => send(`⚽ ${L.teams[0]} vs ${L.teams[1]} on On Target 🎯\n\nThink your team has better ball knowledge than us? Pick Premier League players whose career goals add up as close to the target as you can.\n\nOpen this on your team's phone 👇`, link);
   $("#ready").onclick = () => h2hRound();
 }
 // Someone opened a team link: an invite (no sides yet) or a result (one or both sides).
@@ -1497,7 +1497,7 @@ function renderOnlineEnd(g) {
         <ol class="rounds">${g.rounds.map((r, k) => roundCard(k, r.target, r.res.label,
           `<span class="${tone(r.res.pts)}">${signed(r.res.pts)} pts</span>`, playerRow("You", r.res, r.picks))).join("")}</ol>
         <div class="actions"><button class="btn ghost" id="new">New match</button></div></section></div>`;
-    $("#invite").onclick = () => send(`${on.names[0]} has challenged you to On Target 🎯 ${g.n} rounds, same targets. Can you beat me?`, link);
+    $("#invite").onclick = () => send(`⚽ ${on.names[0]} has challenged you to On Target 🎯\n\nWant to play against me and see who has the better ball knowledge? Pick Premier League players whose career goals add up as close to the target as you can. Same ${g.n} targets I had, and I've scored ${signed(g.points)}.\n\nTry and beat me 👇`, link);
     $("#new").onclick = () => { h2h.online = null; renderSetup(); };
     return;
   }
@@ -2387,7 +2387,7 @@ function renderLive() {
         <div class="live-who">${L.opp ? `<span class="dot on"></span><b>${esc(L.opp.name || "Friend")}</b> is here` : `<span class="dot"></span>Waiting for your friend to join…`}</div>
         <div class="actions"><button class="btn go" id="live-go" ${L.opp ? "" : "disabled"}>Start match</button><button class="btn ghost" id="live-out">Cancel</button></div>
         <p class="hint-line" style="margin:0">Keep this page open. Live matches end if either of you closes or refreshes the page.</p></section>`;
-      $("#live-invite").onclick = () => send(`${L.name} has challenged you to a live game of On Target 🎯 Join now:`, link);
+      $("#live-invite").onclick = () => send(`⚽ ${L.name} has challenged you to a live game of On Target 🎯\n\nWant to play against me and see who has the better ball knowledge? We both get the same target and pick Premier League players whose career goals add up as close as possible. 60 seconds a round.\n\nTap to join 👇`, link);
       $("#live-go").onclick = () => { if (L.opp) liveStart(L); };
     } else {
       view.innerHTML = `<section class="panel"><h2>Live match</h2>
