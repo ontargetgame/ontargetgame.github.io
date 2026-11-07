@@ -8,7 +8,7 @@ Play: https://ontargetgame.github.io/
 
 ## How it's built
 
-A static site with no server. `index.html` + `players.js` are the whole game.
+A static site. `index.html` + `players.js` are the whole game. Optional accounts (email-link sign-in, saved stats) use a free Supabase project: `vendor/supabase-2.110.0.js` is the Supabase client, `supabase/*.sql` are the database scripts (run them in Supabase's SQL Editor), and `.github/workflows/keepalive.yml` pings the database twice a week so the free project doesn't pause.
 
 - `app.html` is the page itself (edit this).
 - `python3 build.py` regenerates `players.js` from `player-data/players.json` and wraps `app.html` into `index.html`.
