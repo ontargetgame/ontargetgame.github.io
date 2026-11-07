@@ -935,9 +935,9 @@ function renderSoloSummary() {
     lines.push(`Round ${k + 1} · Target ${r.target}: ${r.res.skipped ? "skipped" : `${r.res.total} (${r.res.blank ? "Blank" : gapText(r.res)})`} ${signed(r.res.pts)}`);
     if (r.picks.length && !r.res.skipped) lines.push(`   ${r.picks.map(p => `${p.n} ${p.g}`).join(", ")}`);
   });
-  const share = lines.join("\n");
+  const share = [...lines, "", `Try and beat my score 👇 ${shareBase()}`].join("\n");
   // The challenge text leaves the players out so it doesn't give the answers away.
-  const challenge = `I scored ${signed(g.points)} over ${g.n} rounds of On Target 🎯 Same targets, can you beat it? ${shareBase()}#g${g.seed}r${g.n}${g.noRepeat ? "x" : ""}s${g.points}`;
+  const challenge = `I scored ${signed(g.points)} over ${g.n} rounds of On Target 🎯 Same targets, try and beat my score 👇 ${shareBase()}#g${g.seed}r${g.n}${g.noRepeat ? "x" : ""}s${g.points}`;
   const vsFriend = ch && ch.score != null
     ? (g.points > ch.score ? `You beat your friend's ${num(ch.score)}.` : g.points < ch.score ? `Your friend's ${num(ch.score)} wins this one.` : `Level with your friend on ${num(ch.score)}.`) : "";
   view.innerHTML = `<div style="display:flex;flex-direction:column;gap:14px">
@@ -1530,7 +1530,7 @@ function renderDailyEnd(g) {
   // No players in the share text: everyone has the same targets today.
   const text = [`On Target Daily #${g.daily.no} 🎯 ${signed(g.points)} pts`, g.rounds.map(r => dailyIcon(r.res)).join(""),
     ...g.rounds.map((r, k) => `R${k + 1} · Target ${r.target}: ${r.res.skipped ? "skipped" : `${r.res.total} (${r.res.blank ? "Blank" : gapText(r.res)})`} ${signed(r.res.pts)}`),
-    streak > 1 ? `🔥 ${streak}-day streak` : ""].filter(Boolean).join("\n");
+    streak > 1 ? `🔥 ${streak}-day streak` : "", "", "Try and beat my score 👇"].filter((x, i, a) => x || i === a.length - 2).join("\n");
   view.innerHTML = `<div style="display:flex;flex-direction:column;gap:14px">
     <section class="board"><div><div class="lab">Daily #${g.daily.no} · done</div><div class="num">${num(g.points)}</div><div class="lab">points</div></div>
       <div class="side"><div class="lab">Next daily in</div><div class="tot" style="font-size:1.6rem">${untilTomorrow()}</div></div></section>
@@ -1643,7 +1643,7 @@ const hlCard = (p, cls, val, years) => `<section class="hlc ${cls}">
     <div><div class="hn">${esc(p.n)}</div><div class="hm">${esc(hlMeta(p, years)) || "&nbsp;"}</div></div>
     <div class="hv"><b${cls === "known" ? "" : ' id="hl-b"'}>${val}</b><span>PL apps</span></div></section>`;
 function hlShareText(run) {
-  return [`On Target · Higher or lower (${run.hard ? "Hard" : "Easy"}) ↕️ Streak: ${run.streak}${run.streak >= 10 ? " 🔥" : ""}`].join("\n");
+  return [`On Target · Higher or lower (${run.hard ? "Hard" : "Easy"}) ↕️ Streak: ${run.streak}${run.streak >= 10 ? " 🔥" : ""}`, "", "Try and beat my streak 👇"].join("\n");
 }
 function renderHL() {
   const run = hl.run;
