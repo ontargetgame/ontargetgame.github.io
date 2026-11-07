@@ -340,9 +340,22 @@ small.by { color: var(--muted); font-weight: 500; font-size: .72rem; }
 .recs div { display: flex; justify-content: space-between; gap: 10px; padding: 9px 12px; background: var(--surface); font-size: .92rem; }
 .recs b { font-variant-numeric: tabular-nums; }
 .lb-btn { width: 100%; font-size: 1.05rem; padding: 15px; background: var(--surface); border: 1.5px solid var(--line); color: var(--ink); }
+.lb { display: flex; flex-direction: column; gap: 12px; }
+.lb-pick { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.lb-pick button { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 12px 8px; border-radius: 14px; border: 2px solid var(--line); background: var(--surface); color: var(--muted); font: 800 1.05rem/1 var(--display); text-transform: uppercase; letter-spacing: .02em; }
+.lb-pick button span { font-size: 1.4rem; }
+.lb-pick button.t-ot[aria-pressed="true"] { background: var(--board); border-color: var(--board); color: var(--board-ink); }
+.lb-pick button.t-hl[aria-pressed="true"] { background: var(--red-fill); border-color: var(--red-fill); color: #fff; }
+.lb-card { border-radius: 16px; overflow: hidden; border: 2px solid var(--board); background: var(--surface); }
+.lb-card.t-hl { border-color: var(--red-fill); }
+.lb-head { padding: 14px 16px; background: var(--board); color: var(--board-ink); }
+.lb-card.t-hl .lb-head { background: var(--red-fill); color: #fff; }
+.lb-kicker { font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; opacity: .85; }
+.lb-head h2 { font: 900 1.9rem/1 var(--display); text-transform: uppercase; margin: 4px 0 0; }
+.lb-body { padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 12px; }
+.lb-body .hint-line { margin: 0; }
 .lb .seg { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); width: 100%; }
 .lb .seg button { text-align: center; padding: 6px 4px; }
-.lb .lb-name { font: 800 1.15rem/1.1 var(--display); text-transform: uppercase; margin: 0 0 4px; }
 .lb-rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
 .lb-rows li { display: grid; grid-template-columns: 2.2em minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 9px 10px; border-radius: 10px; background: var(--bg); }
 .lb-rows li.top .lb-rank { color: var(--gold); }
@@ -2077,16 +2090,18 @@ startAccounts();
 // Four boards, each with Today and All-time. Scores go up only for signed-in players;
 // anyone can look. "Today" is UK time, except the daily challenge, which goes by its number.
 const LB_GAMES = [
-  { id: "daily", tab: "Daily", name: "Hit the Target · Daily challenge",
+  { id: "daily", group: "ot", tab: "📅 Daily", title: "Daily challenge",
     today: () => `Today's daily (#${dayNo(dayKey())}). One go each, same targets for everyone.`, all: "Every daily score added up, so playing every day counts." },
-  { id: "solo5", tab: "Solo", name: "Hit the Target · Solo, 5 rounds",
+  { id: "solo5", group: "ot", tab: "🎯 Solo", title: "Solo · 5 rounds",
     today: () => "Best 5-round solo game today. Games from challenge links don't count.", all: "Best 5-round solo game ever." },
-  { id: "hl_easy", tab: "H/L Easy", name: "Higher or Lower · Easy",
+  { id: "hl_easy", group: "hl", tab: "Easy", title: "Easy",
     today: () => "Best streak today.", all: "Best streak ever." },
-  { id: "hl_hard", tab: "H/L Hard", name: "Higher or Lower · Hard",
+  { id: "hl_hard", group: "hl", tab: "Hard", title: "Hard",
     today: () => "Best streak today.", all: "Best streak ever." },
 ];
-const lb = { ...{ game: "daily", period: "today" }, ...store.get("lb", {}), rows: null, err: "", seq: 0 };
+const LB_GROUPS = { ot: { name: "Hit the Target", icon: "🎯" }, hl: { name: "Higher or Lower", icon: "↕️" } };
+const lb = { ...{ game: "daily", period: "today", last: { ot: "daily", hl: "hl_easy" } }, ...store.get("lb", {}), rows: null, err: "", seq: 0 };
+const saveLB = () => store.set("lb", { game: lb.game, period: lb.period, last: lb.last });
 
 function submitScore(game, score, day, detail) {
   if (!acct.profile || !acct.sb) return;
@@ -2098,7 +2113,7 @@ function submitTodaysDaily() {
   if (d) submitScore("daily", d.pts, k, { r: d.r.map(x => x[0]) });
 }
 function openLB(game) {
-  if (game) { lb.game = game; store.set("lb", { game: lb.game, period: lb.period }); }
+  if (game) { lb.game = game; lb.last[game.startsWith("hl") ? "hl" : "ot"] = game; saveLB(); }
   setMode("lb"); window.scrollTo({ top: 0 });
 }
 async function loadLB() {
@@ -2111,17 +2126,23 @@ async function loadLB() {
   if (mode === "lb") paintLBList();
 }
 function renderLB() {
-  const G = LB_GAMES.find(x => x.id === lb.game) || LB_GAMES[0];
-  view.innerHTML = `<section class="panel lb">
-    <h2>🏆 Leaderboards</h2>
-    <div class="seg lb-games" role="group" aria-label="Game">${LB_GAMES.map(x => `<button data-lbg="${x.id}" aria-pressed="${x.id === G.id}">${x.tab}</button>`).join("")}</div>
-    <div class="seg" role="group" aria-label="Period"><button data-lbp="today" aria-pressed="${lb.period === "today"}">Today</button><button data-lbp="all" aria-pressed="${lb.period === "all"}">All-time</button></div>
-    <div><h3 class="lb-name">${esc(G.name)}</h3><p class="hint-line">${esc(lb.period === "today" ? G.today() : G.all)}</p></div>
-    <div id="lb-list" aria-live="polite"></div>
-    ${acct.profile ? "" : `<div class="lb-join"><p>${acct.state === "off" ? "Leaderboards need a connection to load." : "Sign in to get your scores on the leaderboard."}</p>${acct.state === "off" ? "" : `<button class="btn primary" id="lb-signin">Sign in</button>`}</div>`}
-  </section>`;
-  view.querySelectorAll("[data-lbg]").forEach(b => b.onclick = () => { lb.game = b.dataset.lbg; store.set("lb", { game: lb.game, period: lb.period }); renderLB(); });
-  view.querySelectorAll("[data-lbp]").forEach(b => b.onclick = () => { lb.period = b.dataset.lbp; store.set("lb", { game: lb.game, period: lb.period }); renderLB(); });
+  const G = LB_GAMES.find(x => x.id === lb.game) || LB_GAMES[0], grp = G.group;
+  view.innerHTML = `<div class="lb">
+    <div class="lb-pick" role="group" aria-label="Game">${Object.entries(LB_GROUPS).map(([k, x]) =>
+      `<button class="t-${k}" data-lbgrp="${k}" aria-pressed="${k === grp}"><span aria-hidden="true">${x.icon}</span>${x.name}</button>`).join("")}</div>
+    <section class="lb-card t-${grp}">
+      <div class="lb-head"><span class="lb-kicker">${LB_GROUPS[grp].icon} ${LB_GROUPS[grp].name}</span><h2>${esc(G.title)}</h2></div>
+      <div class="lb-body">
+        <div class="seg" role="group" aria-label="${grp === "hl" ? "Difficulty" : "Mode"}">${LB_GAMES.filter(x => x.group === grp).map(x => `<button data-lbg="${x.id}" aria-pressed="${x.id === G.id}">${x.tab}</button>`).join("")}</div>
+        <div class="seg" role="group" aria-label="Period"><button data-lbp="today" aria-pressed="${lb.period === "today"}">Today</button><button data-lbp="all" aria-pressed="${lb.period === "all"}">All-time</button></div>
+        <p class="hint-line">${esc(lb.period === "today" ? G.today() : G.all)}</p>
+        <div id="lb-list" aria-live="polite"></div>
+        ${acct.profile ? "" : `<div class="lb-join"><p>${acct.state === "off" ? "Leaderboards need a connection to load." : "Sign in to get your scores on the leaderboard."}</p>${acct.state === "off" ? "" : `<button class="btn primary" id="lb-signin">Sign in</button>`}</div>`}
+      </div>
+    </section></div>`;
+  view.querySelectorAll("[data-lbgrp]").forEach(b => b.onclick = () => { lb.game = lb.last[b.dataset.lbgrp]; saveLB(); renderLB(); });
+  view.querySelectorAll("[data-lbg]").forEach(b => b.onclick = () => { lb.game = b.dataset.lbg; lb.last[grp] = lb.game; saveLB(); renderLB(); });
+  view.querySelectorAll("[data-lbp]").forEach(b => b.onclick = () => { lb.period = b.dataset.lbp; saveLB(); renderLB(); });
   const si = $("#lb-signin"); if (si) si.onclick = openAcct;
   paintLBList(); loadLB();
 }
