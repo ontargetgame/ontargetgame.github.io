@@ -342,6 +342,25 @@ small.by { color: var(--muted); font-weight: 500; font-size: .72rem; }
 .recs { display: grid; gap: 1px; background: var(--line); border-radius: 12px; overflow: hidden; border: 1px solid var(--line); }
 .recs div { display: flex; justify-content: space-between; gap: 10px; padding: 9px 12px; background: var(--surface); font-size: .92rem; }
 .recs b { font-variant-numeric: tabular-nums; }
+.lb-btn { width: 100%; font-size: 1.05rem; padding: 15px; background: var(--surface); border: 1.5px solid var(--line); color: var(--ink); }
+.lb .seg { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); width: 100%; }
+.lb .seg button { text-align: center; padding: 6px 4px; }
+.lb .lb-name { font: 800 1.15rem/1.1 var(--display); text-transform: uppercase; margin: 0 0 4px; }
+.lb-rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.lb-rows li { display: grid; grid-template-columns: 2.2em minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 9px 10px; border-radius: 10px; background: var(--bg); }
+.lb-rows li.top .lb-rank { color: var(--gold); }
+.lb-rows li.me { background: var(--chip); box-shadow: inset 0 0 0 2px var(--board-text); }
+.lb-rows li.lb-gap { display: block; text-align: center; background: none; padding: 0; color: var(--muted); }
+.lb-rank { font: 900 1.2rem/1 var(--display); text-align: center; font-variant-numeric: tabular-nums; }
+.lb-who { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.lb-who b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lb-who em { font-style: normal; font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--board-text); }
+.lb-score { text-align: right; }
+.lb-score b { font: 900 1.3rem/1 var(--display); font-variant-numeric: tabular-nums; }
+.lb-score small { display: block; font-size: .68rem; color: var(--muted); }
+.lb-empty { text-align: center; color: var(--muted); margin: 8px 0; }
+.lb-join { display: flex; flex-direction: column; gap: 8px; align-items: stretch; text-align: center; border-top: 1px solid var(--line); padding-top: 12px; }
+.lb-join p { margin: 0; }
 .home-acct { text-align: center; margin: 4px 0 0; color: var(--muted); font-size: .9rem; }
 .home-acct .linkish { color: var(--ink); font-weight: 700; }
 @media (min-width: 900px) { .wrap { max-width: 640px; } }
@@ -856,6 +875,7 @@ function soloNext(g) {
   g.over = true;
   if (g.daily) dailySave(g);
   if (!g.online && !g.daily && (solo.best[g.n] == null || g.points > solo.best[g.n])) { g.newBest = solo.best[g.n] != null; solo.best[g.n] = g.points; store.set("bestGame", solo.best); }
+  if (!g.online && !g.daily && !g.challenge && g.n === 5) submitScore("solo5", g.points, null, { r: g.targets });
   renderSolo(g); window.scrollTo({ top: 0 });
 }
 
@@ -901,11 +921,12 @@ function renderSoloSummary() {
       <pre class="share" id="share-text" hidden>${esc(share)}</pre>
       <div class="actions"><button class="btn primary" id="challenge">Copy challenge link</button><button class="btn" id="share">Copy breakdown</button></div>
       <p class="hint-line" style="margin:0">The challenge link gives a friend these same ${g.n} targets and your score to beat, without showing your players.</p>
-      <div class="actions"><button class="btn go" id="again">Play again</button><button class="btn ghost" id="settings">Change rounds</button></div>
+      <div class="actions"><button class="btn go" id="again">Play again</button>${g.n === 5 && !g.challenge ? `<button class="btn" id="to-lb">🏆 Leaderboard</button>` : ""}<button class="btn ghost" id="settings">Change rounds</button></div>
     </section></div>`;
   $("#share").onclick = () => copy(share, $("#share-text"));
   $("#challenge").onclick = () => copy(challenge, $("#share-text"));
   $("#again").onclick = () => { solo.game = null; soloStart(); window.scrollTo({ top: 0 }); };
+  if ($("#to-lb")) $("#to-lb").onclick = () => openLB("solo5");
   $("#settings").onclick = () => { solo.game = null; renderSoloSetup(); };
 }
 
@@ -1459,6 +1480,7 @@ function dailySave(g) {
   const keys = Object.keys(L.days).sort();  // keep the last 60 days
   keys.slice(0, -60).forEach(k => delete L.days[k]);
   store.set("daily", L);
+  submitScore("daily", g.points, key, { r: g.targets });
 }
 // Rebuild a finished daily from storage so it shows after a reload.
 function dailyFromLog(key) {
@@ -1491,11 +1513,11 @@ function renderDailyEnd(g) {
       <ol class="rounds">${g.rounds.map((r, k) => roundCard(k, r.target, r.res.skipped ? "Skipped" : r.res.label,
         `<span class="${tone(r.res.pts)}">${signed(r.res.pts)} pts</span>`, playerRow("You", r.res, r.picks))).join("")}</ol>
       <pre class="share" id="share-text" hidden>${esc(text)}</pre>
-      <div class="actions"><button class="btn primary" id="share">Share my score</button><button class="btn ghost" id="to-solo">Play solo</button></div>
+      <div class="actions"><button class="btn primary" id="share">Share my score</button><button class="btn" id="to-lb">🏆 Leaderboard</button></div>
       <p class="hint-line" style="margin:0">Your share doesn't show your players, so it won't spoil today's targets for anyone.</p>
     </section></div>`;
   $("#share").onclick = () => send(text, shareBase());
-  $("#to-solo").onclick = () => setMode("solo");
+  $("#to-lb").onclick = () => openLB("daily");
 }
 function renderDaily() {
   const key = dayKey();
@@ -1657,6 +1679,7 @@ function hlAnswer(up) {
     run.over = true;
     const k = run.hard ? "hard" : "easy";
     if (run.streak > hl.best[k]) { run.newBest = hl.best[k] > 0; hl.best[k] = run.streak; store.set("hlBest", hl.best); }
+    if (run.streak > 0) submitScore("hl_" + k, run.streak);
   }
   renderHL();
 }
@@ -1665,10 +1688,11 @@ function renderHLEnd() {
   $("#hl-end").innerHTML = `<section class="panel">
     <h2>${run.newBest ? "New best streak" : run.streak === 0 ? "Out first time" : `Streak of ${run.streak}`}</h2>
     <pre class="share" id="share-text" hidden>${esc(text)}</pre>
-    <div class="actions"><button class="btn go" id="hl-again">Play again</button><button class="btn" id="hl-share">Share</button></div>
+    <div class="actions"><button class="btn go" id="hl-again">Play again</button><button class="btn" id="hl-share">Share</button><button class="btn" id="hl-lb">🏆 Leaderboard</button></div>
   </section>`;
   $("#hl-again").onclick = () => { hlStart(); window.scrollTo({ top: 0 }); };
   $("#hl-share").onclick = () => send(text, shareBase());
+  $("#hl-lb").onclick = () => openLB(run.hard ? "hl_hard" : "hl_easy");
   $("#hl-again").focus({ preventScroll: true });
 }
 
@@ -1693,10 +1717,12 @@ function renderHome() {
       <div class="tags"><span>🔥 Best: ${hl.best.easy} easy · ${hl.best.hard} hard</span></div>
       <span class="play">Play Higher or Lower</span>
     </button>
+    <button class="btn lb-btn" id="go-lb">🏆 Leaderboards</button>
     <p class="home-acct" id="home-acct" ${acct.user ? "hidden" : ""}><button class="linkish">Sign in</button> to save your stats on any phone</p>
   </div>`;
   $("#tile-ot").onclick = () => setMode(store.get("otMode", "solo"));
   $("#tile-hl").onclick = () => setMode("hl");
+  $("#go-lb").onclick = () => openLB();
 }
 // What "End game" ends in each mode; null when nothing is in progress.
 function activeGame() {
@@ -1716,8 +1742,9 @@ function syncChrome() {
   $("#end-game").hidden = !activeGame();
   const home = mode === "home";
   $("#gamebar").hidden = home;
-  $("#ot-modes").hidden = mode === "hl";
-  $("#hl-name").hidden = mode !== "hl";
+  $("#ot-modes").hidden = mode === "hl" || mode === "lb";
+  $("#hl-name").hidden = mode !== "hl" && mode !== "lb";
+  $("#hl-name").textContent = mode === "lb" ? "Leaderboards" : "Higher or lower";
 }
 function setMode(mo) {
   mode = mo; store.set("mode", mo);
@@ -1730,6 +1757,7 @@ function setMode(mo) {
   if (mo === "home") renderHome();
   else if (mo === "daily") renderDaily();
   else if (mo === "hl") renderHL();
+  else if (mo === "lb") renderLB();
   else if (mo === "solo") renderSolo();
   else if (h2h.online) renderSolo(h2h.online);
   else if (h2h.invite) renderInvite(h2h.invite);
@@ -1855,11 +1883,12 @@ async function onSession(session, event) {
   const user = session && session.user;
   if ((user && user.id) === (acct.user && acct.user.id)) return;
   acct.user = user || null; acct.profile = null; acct.synced = false;
-  if (!user) { acct.state = "out"; paintAcct(); return; }
+  if (!user) { acct.state = "out"; paintAcct(); if (mode === "lb") renderLB(); return; }
   acct.state = "in";
   await loadProfile();
-  if (acct.profile) await pullStats();
+  if (acct.profile) { await pullStats(); submitTodaysDaily(); }
   paintAcct();
+  if (mode === "lb") renderLB();
   // Just back from the email link with no username yet: ask for one straight away.
   if (location.hash === "#") history.replaceState(null, "", location.pathname);
   if (acct.fromLink && !acct.profile && acctEl.hidden) openAcct();
@@ -1875,6 +1904,7 @@ function startAccounts() {
       acct.sb = window.supabase.createClient(SB_URL, SB_KEY, { auth: { flowType: "implicit", detectSessionInUrl: true, persistSession: true, autoRefreshToken: true } });
     } catch { acct.state = "off"; paintAcct(); return; }
     // Supabase calls this inside its own lock, so the follow-up requests run just after.
+    if (mode === "lb") renderLB();
     acct.sb.auth.onAuthStateChange((event, session) => { setTimeout(() => onSession(session, event), 0); });
     acct.sb.auth.getSession().then(({ data }) => { if (!data.session && acct.state === "loading") { acct.state = "out"; paintAcct(); } });
   };
@@ -1974,7 +2004,7 @@ function renderAcct() {
       else {
         acct.draftName = ""; acct.editName = false; acct.pickBadge = null;
         await loadProfile();
-        if (!p) { await pullStats(); toast(`Welcome, ${u}! Your stats are saved`); }
+        if (!p) { await pullStats(); submitTodaysDaily(); toast(`Welcome, ${u}! Your stats are saved`); if (mode === "lb") renderLB(); }
       }
       renderAcct(); paintAcct();
     };
@@ -2024,6 +2054,73 @@ document.addEventListener("keydown", e => { if (e.key === "Escape" && !acctEl.hi
 document.addEventListener("click", e => { if (e.target.closest("#home-acct button")) openAcct(); });
 paintAcct();
 startAccounts();
+
+// ---------------------------------------------------------------- leaderboards
+// Four boards, each with Today and All-time. Scores go up only for signed-in players;
+// anyone can look. "Today" is UK time, except the daily challenge, which goes by its number.
+const LB_GAMES = [
+  { id: "daily", tab: "Daily", name: "Hit the Target · Daily challenge",
+    today: () => `Today's daily (#${dayNo(dayKey())}). One go each, same targets for everyone.`, all: "Every daily score added up, so playing every day counts." },
+  { id: "solo5", tab: "Solo", name: "Hit the Target · Solo, 5 rounds",
+    today: () => "Best 5-round solo game today. Games from challenge links don't count.", all: "Best 5-round solo game ever." },
+  { id: "hl_easy", tab: "H/L Easy", name: "Higher or Lower · Easy",
+    today: () => "Best streak today.", all: "Best streak ever." },
+  { id: "hl_hard", tab: "H/L Hard", name: "Higher or Lower · Hard",
+    today: () => "Best streak today.", all: "Best streak ever." },
+];
+const lb = { ...{ game: "daily", period: "today" }, ...store.get("lb", {}), rows: null, err: "", seq: 0 };
+
+function submitScore(game, score, day, detail) {
+  if (!acct.profile || !acct.sb) return;
+  acct.sb.rpc("submit_score", { p_game: game, p_score: score, p_day: day || null, p_detail: detail || {} }).then(() => {}, () => {});
+}
+// After signing in, today's daily (if already played as a guest) goes on the board too.
+function submitTodaysDaily() {
+  const k = dayKey(), d = daily.log.days[k];
+  if (d) submitScore("daily", d.pts, k, { r: d.r.map(x => x[0]) });
+}
+function openLB(game) {
+  if (game) { lb.game = game; store.set("lb", { game: lb.game, period: lb.period }); }
+  setMode("lb"); window.scrollTo({ top: 0 });
+}
+async function loadLB() {
+  if (!acct.sb) return;
+  const seq = ++lb.seq;
+  lb.rows = null; lb.err = "";
+  const { data, error } = await acct.sb.rpc("leaderboard", { p_game: lb.game, p_period: lb.period, p_day: lb.game === "daily" && lb.period === "today" ? dayKey() : null });
+  if (seq !== lb.seq) return;
+  lb.rows = error ? [] : data; lb.err = error ? "Couldn't load the leaderboard. Check your connection." : "";
+  if (mode === "lb") paintLBList();
+}
+function renderLB() {
+  const G = LB_GAMES.find(x => x.id === lb.game) || LB_GAMES[0];
+  view.innerHTML = `<section class="panel lb">
+    <h2>🏆 Leaderboards</h2>
+    <div class="seg lb-games" role="group" aria-label="Game">${LB_GAMES.map(x => `<button data-lbg="${x.id}" aria-pressed="${x.id === G.id}">${x.tab}</button>`).join("")}</div>
+    <div class="seg" role="group" aria-label="Period"><button data-lbp="today" aria-pressed="${lb.period === "today"}">Today</button><button data-lbp="all" aria-pressed="${lb.period === "all"}">All-time</button></div>
+    <div><h3 class="lb-name">${esc(G.name)}</h3><p class="hint-line">${esc(lb.period === "today" ? G.today() : G.all)}</p></div>
+    <div id="lb-list" aria-live="polite"></div>
+    ${acct.profile ? "" : `<div class="lb-join"><p>${acct.state === "off" ? "Leaderboards need a connection to load." : "Sign in to get your scores on the leaderboard."}</p>${acct.state === "off" ? "" : `<button class="btn primary" id="lb-signin">Sign in</button>`}</div>`}
+  </section>`;
+  view.querySelectorAll("[data-lbg]").forEach(b => b.onclick = () => { lb.game = b.dataset.lbg; store.set("lb", { game: lb.game, period: lb.period }); renderLB(); });
+  view.querySelectorAll("[data-lbp]").forEach(b => b.onclick = () => { lb.period = b.dataset.lbp; store.set("lb", { game: lb.game, period: lb.period }); renderLB(); });
+  const si = $("#lb-signin"); if (si) si.onclick = openAcct;
+  paintLBList(); loadLB();
+}
+function paintLBList() {
+  const el = $("#lb-list"); if (!el) return;
+  if (acct.state === "off") { el.innerHTML = ""; return; }
+  if (!lb.rows) { el.innerHTML = `<p class="hint-line">Loading…</p>`; return; }
+  if (lb.err) { el.innerHTML = `<p class="acct-err">${esc(lb.err)}</p>`; return; }
+  if (!lb.rows.length) { el.innerHTML = `<p class="lb-empty">Nobody's on this board yet. ${acct.profile ? "Play a game to be first!" : "Sign in and play to be first!"}</p>`; return; }
+  const unit = lb.game.startsWith("hl") ? "streak" : "pts";
+  let prev = 0;
+  el.innerHTML = `<ol class="lb-rows">${lb.rows.map(r => {
+    const gap = r.rank > prev + 1 && prev ? `<li class="lb-gap" aria-hidden="true">⋯</li>` : ""; prev = Number(r.rank);
+    const sub = lb.game === "daily" && lb.period === "all" ? `<small>${r.games} day${r.games == 1 ? "" : "s"}</small>` : "";
+    return `${gap}<li class="${r.is_me ? "me" : ""}${r.rank <= 3 ? " top" : ""}"><span class="lb-rank">${r.rank}</span><span class="lb-who"><span class="bdg">${esc(r.badge)}</span><b>${esc(r.username)}</b>${r.is_me ? `<em>you</em>` : ""}</span><span class="lb-score"><b>${num(Number(r.score))}</b>${sub || `<small>${unit}</small>`}</span></li>`;
+  }).join("")}</ol>`;
+}
 
 if (!ALL.length) view.innerHTML = `<section class="panel"><h2>Player list missing</h2><p class="hint-line">players.js didn't load, so there's nobody to pick.</p></section>`;
 else {
