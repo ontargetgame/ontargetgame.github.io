@@ -506,7 +506,7 @@ small.by { color: var(--muted); font-weight: 500; font-size: .72rem; }
           <div><b>Easy</b><span>See each player's clubs and the seasons they played</span></div>
           <div><b>Hard</b><span>Clubs only. Seasons show after you answer</span></div></div></div>
         <h3>Easy or hard</h3>
-        <p>Everyone has played 100+ PL games, and the gaps get closer as your streak grows. Each mode keeps its own best.</p>
+        <p>Anyone who's played in the PL can come up, from legends to one-game wonders. The gaps get closer as your streak grows. Each mode keeps its own best.</p>
       </section>
     </div>
     <div class="dots" id="dots"></div>
@@ -1604,15 +1604,16 @@ function renderDaily() {
 // You see one player's career PL appearances and say whether the next player has
 // more or fewer. One wrong answer ends the run; the score is your streak.
 // Each round is a fresh pair, picked so that:
-//  - only players with 100+ apps come up (below that almost nobody can know),
-//    and better-known players come up more often, especially early in a run;
+//  - every player with at least one PL appearance can come up, but better-known
+//    players come up far more often (a 300-game player about 12x as often as a
+//    one-season squad player), and the first few rounds lean even harder on them;
 //  - nobody repeats within a run, and players you saw in recent runs (kept on
 //    this phone) are much less likely, so it doesn't keep showing Milner;
 //  - difficulty is mixed every round (easy = one has 1.8x the other or more,
 //    medium = 1.35x to 1.8x, hard = within 1.35x), leaning harder as the streak grows;
 //  - "higher" and "lower" are each the answer half the time.
-const HL_POOL = ALL.filter(p => p.a >= 100);
-const hlFame = p => p.a >= 300 || p.g >= 60 ? 1 : p.a >= 200 || p.g >= 25 ? .55 : .25;
+const HL_POOL = ALL.filter(p => p.a >= 1);
+const hlFame = p => p.a >= 300 || p.g >= 60 ? 1 : p.a >= 200 || p.g >= 25 ? .55 : p.a >= 100 ? .25 : p.a >= 40 ? .12 : .08;
 const HL_LEVELS = [
   { key: "easy", lo: 1.8, hi: Infinity },
   { key: "medium", lo: 1.35, hi: 1.8 },
@@ -1683,7 +1684,7 @@ function renderHL() {
     view.innerHTML = `<section class="panel">
       <h2>Higher or lower</h2>
       <p class="hint-line" style="margin:0">You get one player's Premier League appearances. Has the next player made more or fewer? You have 10 seconds for each one. Keep going until you get one wrong or run out of time. Your score is your streak.</p>
-      <p class="hint-line" style="margin:0">Everyone here has played 100+ PL games. The gaps get closer as your streak grows.</p>
+      <p class="hint-line" style="margin:0">Anyone who's played in the Premier League can come up, from legends to one-game wonders. The gaps get closer as your streak grows.</p>
       <div class="field"><span class="fl">Difficulty</span>
         <div class="seg" role="group" aria-label="Difficulty">
           <button data-hlm="easy" aria-pressed="${hl.mode === "easy"}">Easy</button>
