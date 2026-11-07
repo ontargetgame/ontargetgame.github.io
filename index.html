@@ -276,6 +276,13 @@ small.by { color: var(--muted); font-weight: 500; font-size: .72rem; }
 .dots button::before { content: ""; width: 8px; height: 8px; border-radius: 4px; background: var(--muted); transition: width .2s; }
 .dots button[aria-current="true"]::before { width: 22px; background: var(--ink); }
 #rules-back[hidden] { display: none; }
+.sheet .seg { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); width: 100%; }
+.mini-hl { width: 100%; max-width: 340px; display: flex; flex-direction: column; gap: 8px; text-align: left; }
+.mini-hl .hlc { min-height: 0; padding: 10px 14px; }
+.mini-hl .hn { font-size: 1.4rem; }
+.mini-hl .hv b { font-size: 2.4rem; }
+.mini-hl .hl-msg { font-size: 1.1rem; min-height: 0; }
+.mini-hl .sum { text-align: center; }
 /* higher or lower */
 .hl { display: flex; flex-direction: column; gap: 10px; }
 .hlc { border-radius: 16px; padding: 16px 18px; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 4px 14px; min-height: 118px; }
@@ -334,7 +341,10 @@ small.by { color: var(--muted); font-weight: 500; font-size: .72rem; }
 <div class="overlay" id="rules" hidden>
   <section class="sheet" role="dialog" aria-modal="true" aria-labelledby="rules-title">
     <div class="sheet-head"><h2 id="rules-title">How to play</h2><button class="close" id="close-rules" aria-label="Close">×</button></div>
-    <div class="slides" id="slides" tabindex="0" aria-roledescription="carousel">
+    <div class="seg" id="rules-games" role="group" aria-label="Which game">
+      <button data-deck="slides" aria-pressed="true">Hit the Target</button>
+      <button data-deck="slides-hl" aria-pressed="false">Higher or Lower</button></div>
+    <div class="slides" id="slides" tabindex="0" aria-roledescription="carousel" aria-label="Hit the Target rules">
       <section class="slide" aria-label="1 of 5">
         <div class="vis"><div class="mini-board"><span>Target</span><b>50</b></div></div>
         <h3>Hit the target</h3>
@@ -368,13 +378,37 @@ small.by { color: var(--muted); font-weight: 500; font-size: .72rem; }
           <div><b>📅 Daily</b><span>Same 5 targets for everyone</span></div>
           <div><b>🎯 Solo</b><span>3, 5 or 10 rounds</span></div>
           <div><b>📱 Head-to-head</b><span>2 to 6 on one phone, or online</span></div>
-          <div><b>👥 Teams</b><span>One pick each, pass it on</span></div>
-          <div><b>↕️ Higher or lower</b><span>Who has more PL appearances?</span></div></div></div>
+          <div><b>👥 Teams</b><span>One pick each, pass it on</span></div></div></div>
         <h3>Ways to play</h3>
         <p>One player on 0 goals is fine. Pick two and the round is a Blank.</p>
       </section>
     </div>
-    <div class="dots" id="dots"><button data-slide="0" aria-label="Card 1"></button><button data-slide="1" aria-label="Card 2"></button><button data-slide="2" aria-label="Card 3"></button><button data-slide="3" aria-label="Card 4"></button><button data-slide="4" aria-label="Card 5"></button></div>
+    <div class="slides" id="slides-hl" tabindex="0" aria-roledescription="carousel" aria-label="Higher or Lower rules" hidden>
+      <section class="slide" aria-label="1 of 3">
+        <div class="vis"><div class="mini-hl">
+          <div class="hlc known"><div class="hn">Frank Lampard</div><div class="hv"><b>609</b><span>PL apps</span></div></div>
+          <span class="hlvs">VS</span>
+          <div class="hlc ask"><div class="hn">Steven Gerrard</div><div class="hv"><b>?</b><span>PL apps</span></div></div></div></div>
+        <h3>Higher or lower?</h3>
+        <p>You see one player's career Premier League appearances. Has the next player made more or fewer?</p>
+      </section>
+      <section class="slide" aria-label="2 of 3">
+        <div class="vis"><div class="mini-hl">
+          <div class="hlc ask right"><div class="hn">Steven Gerrard</div><div class="hv"><b>504</b><span>PL apps</span></div></div>
+          <p class="hl-msg pos">Correct · 105 fewer</p>
+          <div class="sum">🔥 Streak <b>1</b></div></div></div>
+        <h3>Keep the streak going</h3>
+        <p>Get it right and a new pair comes up. One wrong answer ends the run, and your score is your streak.</p>
+      </section>
+      <section class="slide" aria-label="3 of 3">
+        <div class="vis"><div class="modes">
+          <div><b>Easy</b><span>See each player's clubs and the seasons they played</span></div>
+          <div><b>Hard</b><span>Clubs only. Seasons show after you answer</span></div></div></div>
+        <h3>Easy or hard</h3>
+        <p>Everyone has played 100+ PL games, and the gaps get closer as your streak grows. Each mode keeps its own best.</p>
+      </section>
+    </div>
+    <div class="dots" id="dots"></div>
     <div class="actions"><button class="btn ghost" id="rules-back">Back</button><button class="btn primary" id="rules-next">Next</button></div>
   </section>
 </div>
@@ -1655,7 +1689,8 @@ new MutationObserver(syncChrome).observe(view, { childList: true });
 const rulesEl = $("#rules");
 let rulesReturn = null;
 // The cards swipe natively (scroll snap); dots and Back/Next follow the scroll position.
-const slidesEl = $("#slides"), nSlides = slidesEl.children.length;
+// Each game has its own deck of cards; the tabs at the top switch between them.
+let slidesEl = $("#slides"), nSlides = 0;
 let slide = 0;
 const goSlide = (i, smooth = true) => slidesEl.scrollTo({ left: i * slidesEl.clientWidth, behavior: smooth && !reduced() ? "smooth" : "auto" });
 function syncSlide() {
@@ -1664,12 +1699,23 @@ function syncSlide() {
   $("#rules-back").hidden = slide === 0;
   $("#rules-next").textContent = slide === nSlides - 1 ? "Let's play" : "Next";
 }
-slidesEl.addEventListener("scroll", syncSlide, { passive: true });
-slidesEl.addEventListener("keydown", e => { if (e.key === "ArrowRight") goSlide(Math.min(slide + 1, nSlides - 1)); if (e.key === "ArrowLeft") goSlide(Math.max(slide - 1, 0)); });
+function useDeck(id) {
+  rulesEl.querySelectorAll(".slides").forEach(d => { d.hidden = d.id !== id; });
+  rulesEl.querySelectorAll("[data-deck]").forEach(b => b.setAttribute("aria-pressed", b.dataset.deck === id));
+  slidesEl = $("#" + id); nSlides = slidesEl.children.length;
+  $("#dots").innerHTML = Array.from({ length: nSlides }, (_, i) => `<button data-slide="${i}" aria-label="Card ${i + 1}"></button>`).join("");
+  goSlide(0, false); syncSlide();
+}
+rulesEl.querySelectorAll(".slides").forEach(d => {
+  d.addEventListener("scroll", () => { if (d === slidesEl) syncSlide(); }, { passive: true });
+  d.addEventListener("keydown", e => { if (e.key === "ArrowRight") goSlide(Math.min(slide + 1, nSlides - 1)); if (e.key === "ArrowLeft") goSlide(Math.max(slide - 1, 0)); });
+});
+rulesEl.querySelectorAll("[data-deck]").forEach(b => b.onclick = () => useDeck(b.dataset.deck));
 $("#dots").onclick = e => { const d = e.target.closest("[data-slide]"); if (d) goSlide(+d.dataset.slide); };
 $("#rules-back").onclick = () => goSlide(slide - 1);
 $("#rules-next").onclick = () => slide === nSlides - 1 ? closeRules() : goSlide(slide + 1);
-function openRules() { rulesReturn = document.activeElement; rulesEl.hidden = false; goSlide(0, false); syncSlide(); slidesEl.focus({ preventScroll: true }); }
+// Opens on the game you're in; from the home screen, on Hit the Target.
+function openRules() { rulesReturn = document.activeElement; rulesEl.hidden = false; useDeck(mode === "hl" ? "slides-hl" : "slides"); slidesEl.focus({ preventScroll: true }); }
 function closeRules() { rulesEl.hidden = true; store.set("seenRules", true); rulesReturn && rulesReturn.focus && rulesReturn.focus(); }
 $("#open-rules").onclick = $("#foot-rules").onclick = openRules;
 $("#close-rules").onclick = closeRules;
