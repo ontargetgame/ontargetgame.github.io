@@ -387,6 +387,12 @@ small.by { color: var(--muted); font-weight: 500; font-size: .72rem; }
 .lb-empty { text-align: center; color: var(--muted); margin: 8px 0; }
 .lb-join { display: flex; flex-direction: column; gap: 8px; align-items: stretch; text-align: center; border-top: 1px solid var(--line); padding-top: 12px; }
 .lb-join p { margin: 0; }
+.rivals { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.rivals li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 10px; background: var(--bg); }
+.rv-who { min-width: 0; } .rv-who b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rv-who small, .rv-rec small { display: block; font-size: .72rem; color: var(--muted); }
+.rv-rec { text-align: right; } .rv-rec b { font: 900 1.25rem/1 var(--display); font-variant-numeric: tabular-nums; }
+.rv-rec.pos b { color: var(--good); } .rv-rec.neg b { color: var(--red); }
 .home-acct { text-align: center; margin: 4px 0 0; color: var(--muted); font-size: .9rem; }
 .home-acct .linkish { color: var(--ink); font-weight: 700; }
 @media (min-width: 900px) { .wrap { max-width: 640px; } }
@@ -1395,7 +1401,7 @@ const packSide = rounds => rounds.map(r => r === "T" ? 1 : r ? r.map(p => [p.n, 
 
 function matchLink(g) {
   const on = g.online, mine = g.rounds.map(r => r.res.timeout ? "T" : r.res.skipped ? null : r.picks);
-  const body = { n: on.names, t: g.targets, p: on.opp ? [packSide(on.opp), packSide(mine)] : [packSide(mine)] };
+  const body = { n: on.names, t: g.targets, p: on.opp ? [packSide(on.opp), packSide(mine)] : [packSide(mine)], u: on.uids || [] };
   const data = b64.enc(scramble(new TextEncoder().encode(JSON.stringify(body)), g.seed));
   return `${shareBase()}#m${g.seed.toString(36)}.${g.n}${g.noRepeat ? "x" : ""}.${data}`;
 }
@@ -1410,7 +1416,8 @@ function readMatch() {
     const sides = d.p.slice(0, 2).map(side => side.map(r => r === 1 ? "T" : Array.isArray(r) && r.length
       ? r.slice(0, 5).map(([nm, g]) => ({ n: String(nm).slice(0, 40), g: Math.max(0, Math.min(400, g | 0)) })) : null));
     if (targets.length !== n || !sides.length || sides.some(sd => sd.length !== n) || names.length < sides.length) return null;
-    return { seed, n, noRepeat: !!h[3], names, targets, sides };
+    const uids = (Array.isArray(d.u) ? d.u : []).slice(0, 2).map(x => typeof x === "string" && /^[0-9a-f-]{36}$/.test(x) ? x : null);
+    return { seed, n, noRepeat: !!h[3], names, targets, sides, uids };
   } catch { return null; }
 }
 async function send(text, url) {
@@ -1424,7 +1431,7 @@ function onlineStart(name, n, noRepeat, inv) {
   const seed = inv ? inv.seed : 1 + Math.floor(Math.random() * 999999999);
   h2h.invite = null;
   h2h.online = { seed, n, noRepeat, targets: inv ? inv.targets : gameTargets(seed, n), rounds: [], used: new Set(), points: 0, over: false,
-    online: { names: inv ? [inv.names[0], name] : [name], opp: inv ? inv.sides[0] : null } };
+    online: { names: inv ? [inv.names[0], name] : [name], opp: inv ? inv.sides[0] : null, uids: inv ? [(inv.uids || [])[0] || null, myUid()] : [myUid()] } };
   soloRound(h2h.online); window.scrollTo({ top: 0 });
 }
 function matchOf(names, sides, targets, noRepeat) {
@@ -1461,12 +1468,14 @@ function renderOnlineSetup() {
     <div class="field"><span class="fl">Players</span>${repeatToggle(!!st.noRepeat, "or")}
       <span class="hint-line">${st.noRepeat ? "Hard: each player can only be used once per match." : "Pick anyone, any round."}</span></div>
     <button class="btn primary" id="online-start">${kind === "live" ? "Make a live room" : "Play my rounds"}</button>
+    <p class="hint-line" style="margin:0">🤝 ${acct.profile ? `Matches against signed-in friends are saved. <button class="linkish" id="see-recs">See your records</button>` : `<button class="linkish" data-signin>Sign in</button> to keep your record against each friend.`}</p>
   </section>`;
   const save = () => { st.me = $("#me").value.trim(); store.set("h2h", st); };
   $("#me").oninput = save;
   view.querySelectorAll("[data-where]").forEach(b => b.onclick = () => { save(); st.where = b.dataset.where; store.set("h2h", st); renderSetup(); });
   view.querySelectorAll("[data-n]").forEach(b => b.onclick = () => { save(); st.onlineRounds = +b.dataset.n; store.set("h2h", st); renderOnlineSetup(); });
   view.querySelectorAll("[data-rep]").forEach(b => b.onclick = () => { save(); st.noRepeat = b.dataset.rep === "1"; store.set("h2h", st); renderOnlineSetup(); });
+  if ($("#see-recs")) $("#see-recs").onclick = openAcct;
   view.querySelectorAll("[data-kind]").forEach(b => b.onclick = () => { save(); st.onlineKind = b.dataset.kind; store.set("h2h", st); renderOnlineSetup(); });
   $("#online-start").onclick = () => { save(); if (kind === "live") liveCreate(); else onlineStart(st.me || "Player 1", n, !!st.noRepeat); };
 }
@@ -1476,7 +1485,9 @@ function renderInvite(inv) {
   const st = h2h.setup, from = esc(inv.names[0]);
   if (inv.sides.length === 2) {
     const m = matchOf(inv.names, inv.sides, inv.targets, inv.noRepeat), text = summaryText(m);
-    view.innerHTML = summaryHTML(m, `<button class="btn primary" id="share">Copy summary</button><button class="btn" id="rematch">New online match</button>`);
+    const u = inv.uids || [], side = acct.user ? u.indexOf(acct.user.id) : -1, oppUid = side >= 0 ? u[1 - side] : null;
+    if (side >= 0) recordResult(oppUid, "t" + inv.seed.toString(36), "turns", m.pts[side], m.pts[1 - side], inv.n);
+    view.innerHTML = summaryHTML(m, `<button class="btn primary" id="share">Copy summary</button><button class="btn" id="rematch">New online match</button>`, side >= 0 || !acct.user ? recordNote(side >= 0 ? oppUid : null) : "");
     $("#share").onclick = () => copy(text, $("#share-text"));
     $("#rematch").onclick = () => { h2h.invite = null; st.where = "online"; store.set("h2h", st); history.replaceState(null, "", location.pathname); renderSetup(); };
     return;
@@ -1509,10 +1520,11 @@ function renderOnlineEnd(g) {
     $("#new").onclick = () => { h2h.online = null; renderSetup(); };
     return;
   }
-  const m = matchOf(on.names, [on.opp, g.rounds.map(r => r.res.skipped ? null : r.picks)], g.targets, g.noRepeat);
-  const from = esc(on.names[0]);
+  const m = matchOf(on.names, [on.opp, g.rounds.map(r => r.res.timeout ? "T" : r.res.skipped ? null : r.picks)], g.targets, g.noRepeat);
+  const from = esc(on.names[0]), oppUid = (on.uids || [])[0];
+  recordResult(oppUid, "t" + g.seed.toString(36), "turns", m.pts[1], m.pts[0], g.n);
   view.innerHTML = summaryHTML(m, `<button class="btn primary" id="back">Send result to ${from}</button><button class="btn" id="rematch">Challenge ${from} back</button>`,
-    `<p class="hint-line" style="margin:0">${from} can't see your picks until you send the result.</p>`);
+    `<p class="hint-line" style="margin:0">${from} can't see your picks until you send the result.</p>${recordNote(oppUid)}`);
   $("#back").onclick = () => send(`${summaryText(m).split("\n")[1]} on On Target 🎯 Every round:`, link);
   $("#rematch").onclick = () => { history.replaceState(null, "", location.pathname); onlineStart(on.names[1], g.n, g.noRepeat); };
 }
@@ -1953,7 +1965,9 @@ async function onSession(session, event) {
   if (!user) { acct.state = "out"; paintAcct(); if (mode === "lb") renderLB(); return; }
   acct.state = "in";
   await loadProfile();
-  if (acct.profile) { await pullStats(); submitTodaysDaily(); }
+  if (acct.profile) { await pullStats(); submitTodaysDaily(); flushRecords(); }
+  // A finished take-turns result opened before the account loaded: draw it again so it's saved.
+  if (acct.profile && mode === "h2h" && h2h.invite && h2h.invite.sides.length === 2) renderInvite(h2h.invite);
   paintAcct();
   if (mode === "lb") renderLB();
   // Just back from the email link with no username yet: ask for one straight away.
@@ -2072,7 +2086,7 @@ function renderAcct() {
       else {
         acct.draftName = ""; acct.editName = false; acct.pickBadge = null;
         await loadProfile();
-        if (!p) { await pullStats(); submitTodaysDaily(); toast(`Welcome, ${u}! Your stats are saved`); if (mode === "lb") renderLB(); }
+        if (!p) { await pullStats(); submitTodaysDaily(); flushRecords(); toast(`Welcome, ${u}! Your stats are saved`); if (mode === "lb") renderLB(); }
       }
       renderAcct(); paintAcct();
     };
@@ -2088,11 +2102,13 @@ function renderAcct() {
       ${row("Daily streak", dailyStreak())}${row("Longest daily streak", d.best || 0)}${row("Dailies played", d.played || 0)}
       ${row("Higher or Lower best (easy)", hl.best.easy)}${row("Higher or Lower best (hard)", hl.best.hard)}
     </div>
-    <p class="hint-line">Friends, head-to-head records and match history are coming next.</p>
+    <div class="fl">Head-to-head records</div>
+    <div id="rivals"><p class="hint-line">Loading…</p></div>
     <div class="fl">Badge</div>
     <div class="badges" role="radiogroup" aria-label="Badge">${BADGES.map(b => `<button type="button" role="radio" aria-checked="${b === p.badge}" data-badge="${b}">${b}</button>`).join("")}</div>
     ${err}
     <div class="actions"><button class="btn" id="acct-rename">Change username</button><button class="btn" id="acct-out">Sign out</button></div>`;
+  loadRivals();
   body.querySelectorAll("[data-badge]").forEach(b => b.onclick = async () => {
     const badge = b.dataset.badge, old = p.badge;
     p.badge = badge; paintAcct();
@@ -2122,6 +2138,42 @@ document.addEventListener("keydown", e => { if (e.key === "Escape" && !acctEl.hi
 document.addEventListener("click", e => { if (e.target.closest("#home-acct button")) openAcct(); });
 paintAcct();
 startAccounts();
+
+// ---------------------------------------------------------------- head-to-head records
+// Online matches (live and take turns) are saved to each signed-in player's own record,
+// keyed by the opponent's account. Results wait in a queue until the account has loaded.
+const myUid = () => acct.profile && acct.user ? acct.user.id : null;
+const liveOppUid = L => L.host ? (L.opp && L.opp.uid) || null : L.hostUid || null;
+const recQueue = [];
+function recordResult(opp, key, kind, my, theirs, rounds) {
+  if (!opp) return;
+  recQueue.push({ p_opp: opp, p_key: key, p_kind: kind, p_my: my, p_opp_pts: theirs, p_rounds: rounds });
+  flushRecords();
+}
+function flushRecords() {
+  if (!acct.profile || !acct.sb) return;
+  while (recQueue.length) { const r = recQueue.shift(); if (r.p_opp !== acct.user.id) acct.sb.rpc("record_result", r).then(() => {}, () => {}); }
+}
+function recordNote(oppUid) {
+  const t = !acct.profile ? `<button class="linkish" data-signin>Sign in</button> to keep a record of your matches against friends.`
+    : !oppUid ? "Your friend isn't signed in, so this match isn't saved to your head-to-head records."
+    : "✓ Saved to your head-to-head records.";
+  return `<p class="hint-line rec-note" style="margin:0">${t}</p>`;
+}
+document.addEventListener("click", e => { if (e.target.closest("[data-signin]")) openAcct(); });
+async function loadRivals() {
+  const el = $("#rivals"); if (!el || !acct.sb) return;
+  const { data, error } = await acct.sb.rpc("my_rivals");
+  const box = $("#rivals"); if (!box) return;
+  if (error) { box.innerHTML = `<p class="hint-line">Couldn't load your records.</p>`; return; }
+  if (!data.length) { box.innerHTML = `<p class="hint-line">Play someone online (Head-to-head › Online) while you're both signed in, and your record against them shows here.</p>`; return; }
+  box.innerHTML = `<ul class="rivals">${data.map(r => {
+    const last = new Date(r.last_played).toLocaleDateString(undefined, { day: "numeric", month: "short" });
+    const lead = r.wins > r.losses ? "pos" : r.wins < r.losses ? "neg" : "zero";
+    return `<li><span class="bdg">${esc(r.badge)}</span><span class="rv-who"><b>${esc(r.username)}</b><small>${r.played} played · last ${esc(last)}</small></span>
+      <span class="rv-rec ${lead}"><b>${r.wins}–${r.draws}–${r.losses}</b><small>W–D–L</small></span></li>`;
+  }).join("")}</ul>`;
+}
 
 // ---------------------------------------------------------------- leaderboards
 // Four boards, each with Today and All-time. Scores go up only for signed-in players;
@@ -2238,7 +2290,7 @@ function liveConnect() {
       if (!L.game) L.opp = others[0] || null;               // in the lobby: whoever is here
       else L.gone = !others.some(o => o.id === L.game.guestId);
     } else {
-      L.hostHere = !!host; if (host) L.hostName = host.name;
+      L.hostHere = !!host; if (host) { L.hostName = host.name; L.hostUid = host.uid || null; }
       if (L.game) L.gone = !host;
     }
     if (mode === "h2h" && h2h.live === L && (!L.game || L.game.phase !== "play")) renderLive();
@@ -2247,7 +2299,7 @@ function liveConnect() {
   ch.on("broadcast", { event: "m" }, ({ payload }) => { if (h2h.live === L) liveMsg(L, payload); });
   ch.subscribe(status => {
     if (h2h.live !== L) return;
-    if (status === "SUBSCRIBED") { L.status = "on"; ch.track({ name: L.name, host: L.host }); }
+    if (status === "SUBSCRIBED") { L.status = "on"; ch.track({ name: L.name, host: L.host, uid: myUid() }); }
     else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") L.status = "error";
     if (mode === "h2h" && (!L.game || L.game.phase !== "play")) renderLive();
   });
@@ -2327,7 +2379,11 @@ function liveTryNext(L, r) {
   const g = L.game;
   if (!r.ready || !r.oppReady || g.phase !== "reveal" || g.rounds[g.rounds.length - 1] !== r) return;
   if (g.rounds.length < g.n) liveRound(L);
-  else { g.phase = "over"; renderLive(); }
+  else {
+    g.phase = "over";
+    recordResult(liveOppUid(L), "l" + L.code + L.gameNo, "live", g.pts[g.me], g.pts[1 - g.me], g.n);
+    renderLive();
+  }
 }
 function liveLock(L, r, timedOut) {
   if (r.mine !== null) return;
@@ -2422,6 +2478,7 @@ function renderLive() {
         <ol class="rounds">${g.rounds.map((r, k) => roundCard(k, r.target, r.res[me].pts > r.res[1 - me].pts ? "You" : r.res[me].pts < r.res[1 - me].pts ? esc(opp) : "Level",
           `<span class="${tone(r.res[me].pts)}">${signed(r.res[me].pts)}</span> · <span class="${tone(r.res[1 - me].pts)}">${signed(r.res[1 - me].pts)}</span>`,
           playerRow("You", r.res[me], Array.isArray(r.both[me]) ? r.both[me] : []) + playerRow(opp, r.res[1 - me], Array.isArray(r.both[1 - me]) ? r.both[1 - me] : []))).join("")}</ol>
+        ${recordNote(liveOppUid(L))}
         <div class="actions"><button class="btn go" id="live-again" ${g.rematchSent ? "disabled" : ""}>${g.rematchSent ? "Waiting for " + esc(opp) + "…" : g.rematch ? `${esc(opp)} wants a rematch: play again` : "Rematch"}</button><button class="btn ghost" id="live-out">Leave</button></div>
       </section></div>`;
     $("#live-again").onclick = () => {
