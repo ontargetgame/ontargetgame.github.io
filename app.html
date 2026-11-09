@@ -348,6 +348,13 @@ small.by { color: var(--muted); font-weight: 500; font-size: .72rem; }
 .hlbtns .up { background: var(--board); color: var(--board-ink); }
 .hlbtns .down { background: var(--red-fill); color: #fff; }
 .hl-msg { text-align: center; font: 800 1.3rem/1.1 var(--display); text-transform: uppercase; margin: 0; min-height: 1.3em; }
+/* on/off switch */
+.switch-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; min-height: 48px; padding: 10px 12px; border: 1.5px solid var(--line); border-radius: 12px; background: var(--surface); text-align: left; font-weight: 600; }
+.switch-row .sw { flex: none; position: relative; width: 50px; height: 30px; border-radius: 15px; background: var(--chip); border: 1.5px solid var(--field-line, var(--muted)); transition: background .2s; }
+.switch-row .sw::after { content: ""; position: absolute; top: 2px; left: 2px; width: 23px; height: 23px; border-radius: 50%; background: var(--muted); box-shadow: 0 1px 3px rgb(0 0 0 / .3); transition: transform .2s; }
+.switch-row[aria-checked="true"] .sw { background: var(--good); border-color: var(--good); }
+.switch-row[aria-checked="true"] .sw::after { transform: translateX(20px); background: #fff; }
+@media (prefers-reduced-motion: reduce) { .switch-row .sw, .switch-row .sw::after { transition: none; } }
 .hl-acts .btn { flex: 1 1 0; padding-inline: 8px; white-space: nowrap; }
 .hl-msg.pos { color: var(--good); } .hl-msg.neg { color: var(--red); }
 /* accounts */
@@ -1727,11 +1734,10 @@ function renderHL() {
           <button data-hlm="easy" aria-pressed="${hl.mode === "easy"}">Easy</button>
           <button data-hlm="hard" aria-pressed="${hl.mode === "hard"}">Hard</button></div>
         <span class="hint-line">${hl.mode === "hard" ? "Hard: clubs only. You see their seasons after you answer." : "Easy: you see each player's clubs and the seasons they played."}</span></div>
-      <div class="field"><span class="fl">Players</span>
-        <div class="seg" role="group" aria-label="Which players">
-          <button data-hlk="0" aria-pressed="${!hl.known}">All players</button>
-          <button data-hlk="1" aria-pressed="${hl.known}">Over 100 apps</button></div>
-        <span class="hint-line">${hl.known ? "Only players with more than 100 PL appearances. Practice only: these runs don't go on the leaderboards." : "Anyone who's played in the PL, from legends to one-game wonders. Counts for the leaderboards."}</span></div>
+      <div class="field">
+        <button class="switch-row" id="hl-known" role="switch" aria-checked="${!hl.known}">
+          <span class="sw-text">Include players with 100 or fewer apps</span><span class="sw" aria-hidden="true"></span></button>
+        <span class="hint-line">${hl.known ? "Off: only players with more than 100 PL appearances. Practice only, these runs don't go on the leaderboards." : "On: anyone who's played in the PL, from legends to one-game wonders. Counts for the leaderboards."}</span></div>
       <section class="stats three" aria-label="Your record">
         <div class="stat"><b>${hlBest(hlKey(false, hl.known))}</b><span>Best easy</span></div>
         <div class="stat"><b>${hlBest(hlKey(true, hl.known))}</b><span>Best hard</span></div>
@@ -1739,7 +1745,7 @@ function renderHL() {
       <button class="btn primary" id="hl-start">Play ${hl.mode === "hard" ? "hard" : "easy"}</button>
     </section>`;
     view.querySelectorAll("[data-hlm]").forEach(btn => btn.onclick = () => { hl.mode = btn.dataset.hlm; store.set("hlMode", hl.mode); renderHL(); });
-    view.querySelectorAll("[data-hlk]").forEach(btn => btn.onclick = () => { hl.known = btn.dataset.hlk === "1"; store.set("hlKnown", hl.known); renderHL(); });
+    $("#hl-known").onclick = () => { hl.known = !hl.known; store.set("hlKnown", hl.known); renderHL(); $("#hl-known").focus(); };
     $("#hl-start").onclick = hlStart;
     return;
   }
