@@ -331,6 +331,7 @@ small.by { color: var(--muted); font-weight: 500; font-size: .72rem; }
 .hlbtns .up { background: var(--board); color: var(--board-ink); }
 .hlbtns .down { background: var(--red-fill); color: #fff; }
 .hl-msg { text-align: center; font: 800 1.3rem/1.1 var(--display); text-transform: uppercase; margin: 0; min-height: 1.3em; }
+.hl-acts .btn { flex: 1 1 0; padding-inline: 8px; white-space: nowrap; }
 .hl-msg.pos { color: var(--good); } .hl-msg.neg { color: var(--red); }
 /* accounts */
 .acct-btn { display: grid; place-items: center; padding: 0; color: var(--ink); }
@@ -1752,9 +1753,12 @@ function renderHLEnd() {
   $("#hl-end").innerHTML = `<section class="panel">
     <h2>${run.newBest ? "New best streak" : run.streak === 0 ? "Out first time" : `Streak of ${run.streak}`}</h2>
     <pre class="share" id="share-text" hidden>${esc(text)}</pre>
-    <div class="actions"><button class="btn go" id="hl-again">Play again</button><button class="btn" id="hl-share">Share</button><button class="btn" id="hl-lb">🏆 Leaderboard</button></div>
+    <div class="actions hl-acts"><button class="btn go" id="hl-again">Play again (${run.hard ? "Hard" : "Easy"})</button><button class="btn ghost" id="hl-switch">Play ${run.hard ? "Easy" : "Hard"}</button></div>
+    <div class="actions hl-acts"><button class="btn" id="hl-share">Share</button><button class="btn" id="hl-lb">🏆 Leaderboard</button><button class="btn ghost" id="hl-setup">Back to start</button></div>
   </section>`;
   $("#hl-again").onclick = () => { hlStart(); window.scrollTo({ top: 0 }); };
+  $("#hl-switch").onclick = () => { hl.mode = run.hard ? "easy" : "hard"; store.set("hlMode", hl.mode); hlStart(); window.scrollTo({ top: 0 }); };
+  $("#hl-setup").onclick = () => { hl.run = null; renderHL(); window.scrollTo({ top: 0 }); };
   $("#hl-share").onclick = () => send(text, shareBase());
   $("#hl-lb").onclick = () => openLB(run.hard ? "hl_hard" : "hl_easy");
   $("#hl-again").focus({ preventScroll: true });
@@ -1785,7 +1789,7 @@ function renderHome() {
     <p class="home-acct" id="home-acct" ${acct.user ? "hidden" : ""}><button class="linkish">Sign in</button> to save your stats on any phone</p>
   </div>`;
   $("#tile-ot").onclick = () => setMode(store.get("otMode", "solo"));
-  $("#tile-hl").onclick = () => setMode("hl");
+  $("#tile-hl").onclick = () => { if (hl.run && hl.run.over) hl.run = null; setMode("hl"); };
   $("#go-lb").onclick = () => openLB();
 }
 // What "End game" ends in each mode; null when nothing is in progress.
